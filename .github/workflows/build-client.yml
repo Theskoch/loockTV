@@ -1,0 +1,85 @@
+name: Build Windows Client
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Release tag (e.g. v1.0.0). Leave empty to only upload artifact.'
+        required: false
+        default: ''
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: client/package-lock.json
+
+      - name: Install dependencies
+        working-directory: client
+        run: npm ci --prefer-offline || npm install
+
+      - name: Build Windows installer
+        working-directory: client
+        run: npm run build
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload artifact (always)
+        uses: actions/upload-artifact@v4
+        with:
+          name: LoockIT-Windows-Installer
+          path: client/release/LoockIT-Setup.exe
+          retention-days: 30
+
+      # Create GitHub Release on tag push
+      - name: Create Release (on tag)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: client/release/LoockIT-Setup.exe
+          name: LoockIT ${{ github.ref_name }}
+          body: |
+            ## LoockIT ${{ github.ref_name }}
+
+            ### Установка
+            1. Скачать `LoockIT-Setup.exe`
+            2. Запустить установщик
+            3. При первом запуске ввести адрес сервера и API ключ из панели администратора
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Create/update "latest" pre-release on manual trigger with tag
+      - name: Create Release (manual with tag)
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.release_tag != ''
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.release_tag }}
+          files: client/release/LoockIT-Setup.exe
+          name: LoockIT ${{ github.event.inputs.release_tag }}
+          body: |
+            ## LoockIT ${{ github.event.inputs.release_tag }}
+
+            Сборка запущена вручную.
+
+            ### Установка
+            1. Скачать `LoockIT-Setup.exe`
+            2. Запустить установщик
+            3. При первом запуске ввести адрес сервера и API ключ
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

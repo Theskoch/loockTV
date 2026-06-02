@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>LoockIT Player</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 100vw; height: 100vh; overflow: hidden; background: #000; }
+
+  #container { width: 100%; height: 100%; position: relative; }
+
+  .slide { position: absolute; inset: 0; display: none; }
+  .slide.active { display: flex; align-items: center; justify-content: center; }
+
+  .slide img { max-width: 100%; max-height: 100%; object-fit: contain; }
+  .slide video { width: 100%; height: 100%; object-fit: contain; }
+  webview { width: 100%; height: 100%; border: none; }
+
+  #status {
+    position: fixed; bottom: 16px; right: 16px;
+    background: rgba(0,0,0,0.6); color: rgba(255,255,255,0.5);
+    font-family: monospace; font-size: 11px; padding: 6px 10px; border-radius: 6px;
+    pointer-events: none; z-index: 9999;
+  }
+  #no-content {
+    position: absolute; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; color: #374151; font-family: sans-serif;
+  }
+  #no-content h1 { font-size: 28px; margin-bottom: 8px; }
+  #no-content p { font-size: 14px; }
+
+  #reset-btn {
+    position: fixed; bottom: 16px; left: 16px;
+    background: rgba(0,0,0,0.4); color: rgba(255,255,255,0.3);
+    border: 1px solid rgba(255,255,255,0.1); font-size: 11px;
+    padding: 5px 10px; border-radius: 6px; cursor: pointer;
+    z-index: 9999; font-family: monospace;
+  }
+  #reset-btn:hover { color: rgba(255,100,100,0.8); }
+</style>
+</head>
+<body>
+<div id="container">
+  <div id="no-content">
+    <h1>LoockIT</h1>
+    <p>Плейлист не назначен. Назначь его в панели администратора.</p>
+  </div>
+</div>
+<div id="status">...</div>
+<button id="reset-btn" onclick="resetDevice()">Перепривязать</button>
+
+<script>
+  let playlist = null;
+  let override = null;
+  let currentIdx = 0;
+  let timer = null;
+  let activeSlide = null;
+
+  async function resetDevice() {
+    if (confirm('Сбросить привязку к серверу?')) {
+      await window.lookit.setup.reset();
+    }
+  }
+
+  function setStatus(text) {
+    document.getElementById('status').textContent = text;
+  }
+
+  function clearContainer() {
+    const c = document.getElementById('container');
+    const noContent = document.getElementById('no-content');
+    c.innerHTML = '';
+    c.appendChild(noContent);
+    activeSlide = null;
+  }
+
+  function showNoContent() {
+    document.getElementById('no-content').style.display = 'flex';
+  }
+
+  function hideNoContent() {
+    document.getElementById('no-content').style.display = 'none';
+  }
+
+  function buildSlide(item) {
+    const div = document.createElement('div');
+    div.className = 'slide';
+
+    if (item.type === 'image') {
+      const img = document.createElement('img');
+      img.src = item.localPath ? `file://${item.localPath}` : `/api/content/file/${item.file_path}`;
+      div.appendChild(img);
+    } else if (item.type === 'video') {
+      const video = document.createElement('video');
+      video.src = item.localPath ? `file://${item.localPath}` : `/api/content/file/${item.file_path}`;
+      video.muted = false;
+      video.autoplay = true;
+      video.loop = false;
+      div.appendChild(video);
+    } else if (item.type === 'url') {
+      const wv = document.createElement('webview');
+      wv.src = item.url;
+      wv.setAttribute('allowpopups', 'false');
+      div.appendChild(wv);
+    }
+
+    return div;
+  }
+
+  function showItem(item, duration, onDone) {
+    clearTimeout(timer);
+    const c = document.getElementById('container');
+
+    if (activeSlide) {
+      const vid = activeSlide.querySelector('video');
+      if (vid) vid.pause();
+      activeSlide.classList.remove('active');
+      activeSlide.remove();
+    }
+
+    hideNoContent();
+    const slide = buildSlide(item);
+    c.appendChild(slide);
+    slide.classList.add('active');
+    activeSlide = slide;
+
+    if (item.type === 'video') {
+      const vid = slide.querySelector('video');
+      vid.play().catch(() => {});
+      vid.onended = onDone;
+      // fallback in case video is shorter or duration set explicitly
+      if (duration) timer = setTimeout(onDone, duration * 1000);
+    } else {
+      timer = setTimeout(onDone, duration * 1000);
+    }
+
+    setStatus(`${item.name} (${item.type})`);
+  }
+
+  function isOverrideActive() {
+    if (!override) return false;
+    const now = new Date();
+    return new Date(override.start_at) <= now && now <= new Date(override.end_at);
+  }
+
+  function playNext() {
+    clearTimeout(timer);
+
+    if (isOverrideActive()) {
+      showItem(
+        {
+          type: override.type,
+          name: override.name,
+          localPath: override.file_path ? null : null,
+          file_path: override.file_path,
+          url: override.url,
+        },
+        10,
+        playNext
+      );
+      const msLeft = new Date(override.end_at) - new Date();
+      timer = setTimeout(playNext, Math.max(msLeft, 0));
+      return;
+    }
+
+    if (!playlist || !playlist.items || playlist.items.length === 0) {
+      showNoContent();
+      setStatus('Нет плейлиста');
+      return;
+    }
+
+    if (currentIdx >= playlist.items.length) currentIdx = 0;
+    const item = playlist.items[currentIdx];
+    currentIdx = (currentIdx + 1) % playlist.items.length;
+
+    showItem(item, item.duration_seconds || 10, playNext);
+  }
+
+  async function init() {
+    const data = await window.lookit.player.getPlaylist();
+    if (data) {
+      playlist = data.playlist;
+      override = data.override;
+    }
+    playNext();
+
+    window.lookit.player.onSync((data) => {
+      const wasPlaylistId = playlist?.playlist_id;
+      playlist = data.playlist;
+      override = data.override;
+      if (isOverrideActive()) playNext();
+      else if (playlist?.playlist_id !== wasPlaylistId) {
+        currentIdx = 0;
+        playNext();
+      }
+    });
+
+    window.lookit.player.onRestart(() => {
+      currentIdx = 0;
+      playNext();
+    });
+  }
+
+  init();
+</script>
+</body>
+</html>
