@@ -31,11 +31,6 @@
       "allowToChangeInstallationDirectory": true,
       "artifactName": "LoockIT-Setup.exe"
     },
-    "files": ["src/**/*"],
-    "publish": {
-      "provider": "github",
-      "owner": "Theskoch",
-      "repo": "loockTV"
-    }
+    "files": ["src/**/*"]
   }
 }
