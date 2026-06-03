@@ -9,104 +9,128 @@ Digital signage система — управление информационн
 - **Admin UI**: React + Tailwind + Vite → компилируется в `admin-ui/dist/`, раздаётся сервером
 - **Client**: Electron.js (только Windows), полноэкранный плеер
 - **Deploy**: Docker Compose (services: `server`, `db`), данные вне контейнера
+- **CI**: GitHub Actions → при пуше тега `v*` собирает `LoockIT-Setup.exe` и создаёт GitHub Release
 
 ## Структура
 ```
 LoockIT/
 ├── server/src/
-│   ├── index.js          # точка входа, express + socket.io
-│   ├── db/               # schema.sql + pool
-│   ├── middleware/        # auth.js (JWT), screenAuth.js (API key)
-│   └── routes/           # admin, screens, playlists, content, client
+│   ├── index.js          # Express + Socket.io, раздаёт admin-ui/dist
+│   ├── db/               # schema.sql + pg pool
+│   ├── middleware/        # auth.js (JWT), screenAuth.js (x-api-key header)
+│   └── routes/
+│       ├── admin.js      # POST /login, GET /me
+│       ├── screens.js    # CRUD + /reboot + /overrides + /regenerate-key
+│       ├── playlists.js  # CRUD + items
+│       ├── content.js    # upload (1GB) + url + file serve
+│       └── client.js     # /playlist, /info (для Electron клиента)
 ├── admin-ui/src/
-│   ├── App.jsx           # роутер + защита маршрутов
+│   ├── App.jsx           # роутер + Layout + ProtectedRoute
 │   ├── api.js            # все HTTP запросы
-│   └── pages/            # Login, Screens, Playlists, Content
+│   └── pages/
+│       ├── LoginPage.jsx       # логин + кнопка скачать .exe
+│       ├── ScreensPage.jsx     # список экранов, кликабельный
+│       ├── ScreenDetailPage.jsx # управление экраном (новый)
+│       ├── PlaylistsPage.jsx   # двухпанельный редактор с DnD
+│       └── ContentPage.jsx     # загрузка файлов + drag&drop
 ├── client/src/
-│   ├── main.js           # Electron main process, sync, socket
-│   ├── preload.js        # contextBridge IPC
-│   └── renderer/         # setup.html, player.html
+│   ├── main.js           # Electron main: sync, socket, IPC, autoplay flags
+│   ├── preload.js        # contextBridge
+│   └── renderer/
+│       ├── setup.html    # первый запуск: ввод serverUrl + apiKey
+│       └── player.html   # плеер: слайды, угловое меню (hover), override
 ├── .github/workflows/
-│   └── build-client.yml  # авто-билд Windows .exe → GitHub Releases
+│   └── build-client.yml  # setup-node@v3, npm install, electron-builder, softprops release
 ├── docker-compose.yml
-└── .env.example
+├── .env.example
+└── build.sh
 ```
 
-## Схема БД (PostgreSQL)
-- `admin` — логин/пароль хэш администратора
-- `screens` — экраны (id, name, api_key, last_seen, current_playlist_id)
-- `content` — медиа (id, name, type: image|video|url, file_path, url)
-- `playlists` — плейлисты (id, name)
-- `playlist_items` — элементы плейлиста (playlist_id, content_id, duration_seconds, sort_order)
-- `screen_overrides` — временные прерывания (screen_id, content_id, start_at, end_at)
+## Схема БД
+- `admin` — логин/password_hash
+- `screens` — id, name, api_key, last_seen, current_playlist_id
+- `content` — id, name, type(image|video|url), file_path, url, mime_type, size_bytes
+- `playlists` — id, name
+- `playlist_items` — playlist_id, content_id, duration_seconds, sort_order
+- `screen_overrides` — screen_id, content_id, start_at, end_at
 
 ## API
-**Admin (JWT Bearer):**
-- `POST /api/admin/login` — получить токен
-- `GET/POST /api/screens` — список/создание экранов
-- `PUT /api/screens/:id` — обновить (name, current_playlist_id)
-- `POST /api/screens/:id/regenerate-key` — новый API ключ (перепривязка)
-- `POST /api/screens/:id/override` — временное прерывание
+**Admin (Bearer JWT):**
+- `POST /api/admin/login`
+- `GET /api/screens` / `GET /api/screens/:id`
+- `POST /api/screens` / `PUT /api/screens/:id` / `DELETE /api/screens/:id`
+- `POST /api/screens/:id/regenerate-key`
+- `POST /api/screens/:id/reboot` → socket emit `screen:reboot`
+- `GET /api/screens/:id/overrides`
+- `POST /api/screens/:id/override` / `DELETE /api/screens/:id/override/:oid`
 - `GET/POST/PUT/DELETE /api/playlists` + `GET /api/playlists/:id` (с items)
-- `GET /api/content` + `POST /api/content/upload` + `POST /api/content/url` + `DELETE /api/content/:id`
+- `GET /api/content` / `POST /api/content/upload` (1GB) / `POST /api/content/url` / `DELETE /api/content/:id`
 
 **Client (x-api-key header):**
-- `GET /api/client/info` — проверка ключа, получение screen_id
-- `GET /api/client/playlist` — текущий плейлист + override
-- `GET /api/content/file/:filename` — скачать файл (кэшируется на экране)
+- `GET /api/client/info` — проверка ключа
+- `GET /api/client/playlist` — плейлист + активный override
+- `GET /api/content/file/:filename` — скачать файл (кэш)
 
-**WebSocket (Socket.io):**
+**WebSocket:**
 - auth: `{ apiKey }` в handshake
-- Server → Client: `playlist:update`, `override:update`
+- Server→Client: `playlist:update`, `override:update`, `screen:reboot`
 
 ## Логика клиента (Electron)
-1. Первый запуск → `setup.html`: ввод serverUrl + apiKey
-2. `main.js` вызывает `/api/client/info` для проверки ключа
-3. Подключается к Socket.io, синкает плейлист каждые 60 сек
-4. Скачивает все файлы плейлиста в `userData/cache/`
-5. При дисконекте продолжает играть кэш
-6. `player.html` крутит слайды в цикле (image → img, video → video, url → webview)
-7. Override активен если `start_at <= now <= end_at`
-8. Кнопка "Перепривязать" в углу → сбрасывает store → открывает setup.html
+1. Первый запуск → `setup.html` (serverUrl + apiKey, мин 32 символа)
+2. Проверка через `/api/client/info`, сохранение в electron-store
+3. Socket.io подключение, синк каждые 60 сек
+4. Файлы скачиваются в `userData/cache/`, старые удаляются
+5. При дисконекте играет кэш
+6. `player.html`: цикл слайдов (image→img, video→video, url→webview)
+7. Видео: стартует muted → unmute после `playing` события (обход autoplay policy)
+8. При ошибке видео (кодек) — пропуск через 2 сек
+9. Override активен если `start_at <= now <= end_at`
+10. Угловое меню: невидимая зона 80×80px снизу-слева, при hover появляется панель с инфой и кнопкой "Перепривязать"
+11. `screen:reboot` → `app.relaunch() + app.exit(0)`
 
-## Деплой (первый раз)
+## Admin UI — страницы
+- **Экраны**: список, клик → ScreenDetailPage
+- **ScreenDetailPage**: статус/аптайм, смена плейлиста, override с DnD, API ключ (show/copy/regen), reboot, удалить
+- **Override DnD**: тащишь контент из левого списка в правую зону → выбираешь время → Apply
+- **Плейлисты**: двухпанельный редактор — левая панель очередь (DnD реордер), правая панель библиотека (DnD в очередь), кнопки +/↑↓ тоже есть, один контент можно добавить несколько раз
+- **Контент**: drag&drop на страницу ИЛИ в зону, multi-file, URL добавление
+
+## Деплой
 ```bash
-cp .env.example .env        # поменять пароли!
+# Первый раз
+cp .env.example .env && nano .env
 cd admin-ui && npm install && npm run build && cd ..
 docker compose up -d --build
-# сервер: http://localhost:3000  логин: admin / (пароль из .env)
-```
 
-## Деплой (обновление без потери данных)
-```bash
-cd admin-ui && npm run build && cd ..
+# Обновление (данные не трогаются)
+git pull
+cd admin-ui && npm install && npm run build && cd ..
 docker compose up -d --build --no-deps server
 ```
-> Данные в `data/postgres/` и `data/uploads/` вне контейнеров — не затрагиваются.
 
 ## Сборка Windows клиента
-Автоматически через GitHub Actions при пуше тега:
 ```bash
-git tag v1.0.0 && git push origin v1.0.0
+git tag v1.0.X && git push origin v1.0.X
+# → GitHub Actions (windows-latest, setup-node@v3) → release LoockIT-Setup.exe
 ```
-Или вручную: GitHub → Actions → "Build Windows Client" → Run workflow.
-Готовый `.exe` появляется в GitHub Releases.
+Кнопка на странице входа: `https://github.com/Theskoch/loockTV/releases/latest/download/LoockIT-Setup.exe`
 
-На странице входа есть кнопка "Скачать приложение" → последний релиз.
+## Текущий статус (последний тег: v1.0.4)
+- v1.0.0–v1.0.2: фиксы npm cache в CI
+- v1.0.3: убран electron-builder auto-publish, добавлен `permissions: contents: write`
+- v1.0.4: autoplay fix (muted start + unmute), onerror skip, autoplay-policy флаг
+
+## Известные ограничения / TODO
+- MOV с ProRes кодеком не воспроизведётся — нужно MP4 (H.264). Пользователю сообщено.
+- Статус "онлайн" = last_seen > 1 минуты назад (не настоящий WebSocket presence)
+- Нет смены пароля администратора через UI (только через .env + пересоздание контейнера)
+- Нет поддержки нескольких администраторов
 
 ## Переменные окружения (.env)
 | Переменная | По умолчанию | Описание |
 |---|---|---|
 | DB_PASSWORD | lookit_secret | Пароль PostgreSQL |
-| JWT_SECRET | change_this... | Секрет для JWT токенов |
-| ADMIN_USERNAME | admin | Логин администратора |
-| ADMIN_PASSWORD | changeme123 | Пароль администратора |
+| JWT_SECRET | change_this... | Секрет JWT (мин 32 символа) |
+| ADMIN_USERNAME | admin | Логин |
+| ADMIN_PASSWORD | changeme123 | Пароль |
 | SERVER_PORT | 3000 | Порт сервера |
-
-## Известные особенности
-- Статус экрана: онлайн если `last_seen > NOW() - 1 минута`
-- Файлы хранятся в `data/uploads/` по имени `{timestamp}-{random}{ext}`
-- API ключ экрана — 48 hex символов (24 случайных байта)
-- Плейлист зациклен: currentIdx сбрасывается в 0 при достижении конца
-- Видео: переход после окончания видео (или по duration если задан)
-- URL контент: показывается через `<webview>` Electron — требует `webviewTag: true`
