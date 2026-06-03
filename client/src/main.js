@@ -139,6 +139,9 @@ ipcMain.handle('logs:openFolder', () => {
   if (LOG_FILE) shell.showItemInFolder(LOG_FILE);
 });
 
+// IPC: App info
+ipcMain.handle('app:getVersion', () => app.getVersion());
+
 // ─── Network helpers ──────────────────────────────────────────────────────
 function fetchJson(url, apiKey) {
   return new Promise((resolve, reject) => {
@@ -288,7 +291,7 @@ function connectToServer(serverUrl, apiKey) {
   if (socket) socket.disconnect();
 
   socket = io(serverUrl, {
-    auth: { apiKey },
+    auth: { apiKey, version: app.getVersion() },
     reconnection: true,
     reconnectionDelay: 5000,
   });

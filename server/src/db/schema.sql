@@ -48,6 +48,9 @@ CREATE TABLE IF NOT EXISTS screen_overrides (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Safe migration: add app_version column if not exists
+ALTER TABLE screens ADD COLUMN IF NOT EXISTS app_version VARCHAR(32);
+
 CREATE INDEX IF NOT EXISTS idx_screens_api_key ON screens(api_key);
 CREATE INDEX IF NOT EXISTS idx_playlist_items_playlist ON playlist_items(playlist_id);
 CREATE INDEX IF NOT EXISTS idx_overrides_screen ON screen_overrides(screen_id);

@@ -15,9 +15,13 @@ function setupSocket(io) {
     }
 
     const screenId = result.rows[0].id;
+    const appVersion = socket.handshake.auth.version || null;
     socket.join(`screen:${screenId}`);
 
-    await pool.query('UPDATE screens SET last_seen = NOW() WHERE id = $1', [screenId]);
+    await pool.query(
+      'UPDATE screens SET last_seen = NOW(), app_version = COALESCE($1, app_version) WHERE id = $2',
+      [appVersion, screenId]
+    );
 
     const heartbeat = setInterval(async () => {
       await pool.query('UPDATE screens SET last_seen = NOW() WHERE id = $1', [screenId]);

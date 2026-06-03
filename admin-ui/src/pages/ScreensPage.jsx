@@ -76,6 +76,9 @@ export default function ScreensPage() {
                   {screen.online ? 'В сети' : screen.last_seen ? `Последний раз в сети ${new Date(screen.last_seen).toLocaleString('ru')}` : 'Никогда не подключался'}
                 </div>
               </div>
+              {screen.app_version && (
+                <span className="text-xs text-gray-600 font-mono shrink-0">v{screen.app_version}</span>
+              )}
               {screen.playlist_name && (
                 <span className="text-xs text-gray-500 bg-gray-800 px-2.5 py-1 rounded-lg shrink-0">
                   {screen.playlist_name}

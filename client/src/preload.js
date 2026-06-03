@@ -14,4 +14,7 @@ contextBridge.exposeInMainWorld('lookit', {
     getPath: () => ipcRenderer.invoke('logs:getPath'),
     openFolder: () => ipcRenderer.invoke('logs:openFolder'),
   },
+  app: {
+    getVersion: () => ipcRenderer.invoke('app:getVersion'),
+  },
 });

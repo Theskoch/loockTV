@@ -274,7 +274,14 @@ export default function ScreenDetailPage() {
       <div className="grid gap-4">
         {/* Status & uptime */}
         <div className="bg-gray-900 rounded-xl p-5">
-          <h3 className="font-medium text-white mb-3">Статус</h3>
+          <div className="flex items-start justify-between mb-3">
+            <h3 className="font-medium text-white">Статус</h3>
+            {screen.app_version && (
+              <span className="text-xs bg-gray-800 text-gray-400 px-2 py-0.5 rounded-full font-mono">
+                v{screen.app_version}
+              </span>
+            )}
+          </div>
           <div className="text-sm text-gray-400">{uptimeText}</div>
           <div className="flex gap-2 mt-4">
             <button

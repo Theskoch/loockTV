@@ -85,6 +85,7 @@
 <div id="corner-zone"></div>
 <div id="corner-panel">
   <div class="lbl">Экран</div><div class="val" id="info-name">—</div>
+  <div class="lbl">Версия приложения</div><div class="val" id="info-version">—</div>
   <div class="lbl">Статус</div><div class="val" id="info-status">—</div>
   <div class="lbl">Файл лога</div><div class="val" id="info-log">—</div>
   <button class="btn-muted" onclick="openLogs()">Открыть папку с логом</button>
@@ -264,8 +265,12 @@
 
   // ── Init ──────────────────────────────────────────────────────
   async function init() {
-    // Show log path in corner panel
-    const logPath = await window.lookit.logs.getPath();
+    // Show version + log path in corner panel
+    const [logPath, version] = await Promise.all([
+      window.lookit.logs.getPath(),
+      window.lookit.app.getVersion(),
+    ]);
+    document.getElementById('info-version').textContent = version ? `v${version}` : '—';
     document.getElementById('info-log').textContent = logPath || '—';
 
     // Try to get already-loaded playlist (e.g. after setup)
