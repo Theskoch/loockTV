@@ -44,7 +44,7 @@ app.use('/api/content', contentRoutes);
 app.use('/api/client', clientRoutes);
 
 // Serve admin UI static files
-const uiPath = path.join(__dirname, '../../admin-ui/dist');
+const uiPath = path.join(__dirname, '../admin-ui/dist');
 app.use(express.static(uiPath));
 app.get('*', (req, res) => {
   res.sendFile(path.join(uiPath, 'index.html'));
