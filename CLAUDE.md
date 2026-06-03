@@ -119,9 +119,11 @@ docker compose up -d --build --no-deps server
 ```bash
 git tag v1.X.X && git push origin v1.X.X
 ```
-→ GitHub Actions: ставит версию из тега в package.json → electron-builder собирает и публикует на GitHub с `latest.yml` → auto-updater на экранах может обновиться.
+→ GitHub Actions: ставит версию из тега в package.json → electron-builder собирает и публикует на GitHub с `latest.yml` → auto-updater на экранах может обновиться через кнопку в панели.
 
 Кнопка скачать на странице входа: `https://github.com/Theskoch/loockTV/releases/latest/download/LoockIT-Setup.exe`
+
+**Важно про auto-updater:** работает начиная с v1.0.9 (первая сборка где CI генерирует `latest.yml`). Экраны на версиях до v1.0.9 нужно обновить вручную один раз — после этого все следующие версии раскатываются из панели.
 
 ## История версий
 - v1.0.0–v1.0.2: фиксы npm cache в CI
@@ -131,6 +133,7 @@ git tag v1.X.X && git push origin v1.X.X
 - v1.0.6: сохранение плейлиста на диск → мгновенный старт после перезапуска
 - v1.0.7: отслеживание версии приложения (screens.app_version, угловая панель, UI)
 - v1.0.8: авто-обновление через панель админа (electron-updater, кнопка "Обновить")
+- v1.0.9: первая сборка с рабочим auto-updater (latest.yml генерируется CI). С этой версии обновления можно раскатывать из панели без ручной переустановки.
 
 ## Переменные окружения (.env)
 | Переменная | По умолчанию | Описание |
