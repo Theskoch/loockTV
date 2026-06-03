@@ -1,15 +1,43 @@
-const { app, BrowserWindow, ipcMain, screen: electronScreen } = require('electron');
+const { app, BrowserWindow, ipcMain, screen: electronScreen, shell } = require('electron');
 
 // Allow video autoplay without user gesture (needed for signage)
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
-// Enable proprietary codecs (H.264, AAC) on Windows
 app.commandLine.appendSwitch('enable-features', 'PlatformHEVCDecoderSupport');
 app.commandLine.appendSwitch('disable-features', 'MediaCapabilitiesQueryGpuFactories');
+
 const path = require('path');
 const fs = require('fs');
 const https = require('https');
 const http = require('http');
 const { io } = require('socket.io-client');
+
+// ─── Logger (20MB rotation) ────────────────────────────────────────────────
+const LOG_MAX = 20 * 1024 * 1024;
+let LOG_FILE = null;
+
+function initLogger() {
+  const logsDir = path.join(app.getPath('userData'), 'logs');
+  if (!fs.existsSync(logsDir)) fs.mkdirSync(logsDir, { recursive: true });
+  LOG_FILE = path.join(logsDir, 'lookit.log');
+  log('INFO', `LoockIT started. userData=${app.getPath('userData')}`);
+}
+
+function log(level, ...args) {
+  const msg = args.map(a => (a instanceof Error ? a.stack || a.message : typeof a === 'object' ? JSON.stringify(a) : String(a))).join(' ');
+  const line = `${new Date().toISOString()} [${level}] ${msg}\n`;
+  process.stdout.write(line);
+  if (!LOG_FILE) return;
+  try {
+    let size = 0;
+    try { size = fs.statSync(LOG_FILE).size; } catch {}
+    if (size >= LOG_MAX) {
+      fs.writeFileSync(LOG_FILE, line); // overwrite (rotate)
+    } else {
+      fs.appendFileSync(LOG_FILE, line);
+    }
+  } catch {}
+}
+// ──────────────────────────────────────────────────────────────────────────
 
 // electron-store for persistent config
 let Store;
@@ -33,6 +61,7 @@ const CACHE_DIR = path.join(app.getPath('userData'), 'cache');
 if (!fs.existsSync(CACHE_DIR)) fs.mkdirSync(CACHE_DIR, { recursive: true });
 
 app.whenReady().then(async () => {
+  initLogger();
   store = await getStore();
   createWindow();
 });
@@ -69,7 +98,7 @@ function createWindow() {
   }
 }
 
-// IPC: Setup form submits credentials
+// IPC: Setup form
 ipcMain.handle('setup:save', async (event, { serverUrl, apiKey }) => {
   if (!serverUrl || !apiKey || apiKey.length < 32) {
     return { error: 'Адрес сервера и API ключ (мин. 32 символа) обязательны' };
@@ -81,15 +110,18 @@ ipcMain.handle('setup:save', async (event, { serverUrl, apiKey }) => {
     store.set('serverUrl', url);
     store.set('apiKey', apiKey);
     store.set('screenId', info.screen_id);
+    log('INFO', `Screen paired. id=${info.screen_id} server=${url}`);
     mainWindow.loadFile(path.join(__dirname, 'renderer/player.html'));
     connectToServer(url, apiKey);
     return { ok: true };
   } catch (e) {
+    log('ERROR', 'setup:save failed', e);
     return { error: `Ошибка подключения: ${e.message}` };
   }
 });
 
 ipcMain.handle('setup:reset', async () => {
+  log('INFO', 'Screen reset (unpaired)');
   store.clear();
   if (socket) socket.disconnect();
   mainWindow.loadFile(path.join(__dirname, 'renderer/setup.html'));
@@ -100,7 +132,13 @@ ipcMain.handle('player:getPlaylist', () => {
   return { playlist: currentPlaylist, override: overrideData };
 });
 
-// Fetch JSON from server with API key
+// IPC: Logs
+ipcMain.handle('logs:getPath', () => LOG_FILE);
+ipcMain.handle('logs:openFolder', () => {
+  if (LOG_FILE) shell.showItemInFolder(LOG_FILE);
+});
+
+// ─── Network helpers ──────────────────────────────────────────────────────
 function fetchJson(url, apiKey) {
   return new Promise((resolve, reject) => {
     const parsed = new URL(url);
@@ -118,12 +156,12 @@ function fetchJson(url, apiKey) {
   });
 }
 
-// Download a file to cache
 function downloadFile(serverUrl, filename, apiKey) {
   return new Promise((resolve, reject) => {
     const dest = path.join(CACHE_DIR, filename);
     if (fs.existsSync(dest)) return resolve(dest);
 
+    log('INFO', `Downloading: ${filename}`);
     const url = `${serverUrl}/api/content/file/${filename}`;
     const parsed = new URL(url);
     const lib = parsed.protocol === 'https:' ? https : http;
@@ -131,12 +169,20 @@ function downloadFile(serverUrl, filename, apiKey) {
     const file = fs.createWriteStream(dest);
     const req = lib.request(url, { headers: { 'x-api-key': apiKey } }, (res) => {
       res.pipe(file);
-      file.on('finish', () => file.close(() => resolve(dest)));
+      file.on('finish', () => file.close(() => {
+        log('INFO', `Downloaded: ${filename}`);
+        resolve(dest);
+      }));
     });
-    req.on('error', (e) => { fs.unlink(dest, () => {}); reject(e); });
+    req.on('error', (e) => {
+      log('ERROR', `Download failed: ${filename}`, e.message);
+      fs.unlink(dest, () => {});
+      reject(e);
+    });
     req.end();
   });
 }
+// ─────────────────────────────────────────────────────────────────────────
 
 async function syncPlaylist() {
   const serverUrl = store.get('serverUrl');
@@ -146,43 +192,48 @@ async function syncPlaylist() {
   try {
     const data = await fetchJson(`${serverUrl}/api/client/playlist`, apiKey);
 
-    // Download all files in playlist
+    // Try downloading all files; track which succeeded
     if (data.items) {
       for (const item of data.items) {
         if (item.file_path) {
-          try { await downloadFile(serverUrl, item.file_path, apiKey); } catch (e) { /* skip */ }
+          try { await downloadFile(serverUrl, item.file_path, apiKey); } catch {}
         }
       }
     }
     if (data.override?.file_path) {
-      try { await downloadFile(serverUrl, data.override.file_path, apiKey); } catch (e) {}
+      try { await downloadFile(serverUrl, data.override.file_path, apiKey); } catch {}
     }
 
-    // Resolve local paths
-    const items = (data.items || []).map(item => ({
-      ...item,
-      localPath: item.file_path ? path.join(CACHE_DIR, item.file_path) : null,
-    }));
+    // Resolve local paths + mark downloaded (check file actually exists on disk)
+    const items = (data.items || []).map(item => {
+      const localPath = item.file_path ? path.join(CACHE_DIR, item.file_path) : null;
+      const downloaded = localPath ? fs.existsSync(localPath) : true; // URLs always ready
+      return { ...item, localPath, downloaded };
+    });
+
+    const notReady = items.filter(i => !i.downloaded).length;
+    if (notReady > 0) log('INFO', `Sync done. ${items.length - notReady}/${items.length} files ready, ${notReady} still downloading`);
 
     const prevPlaylistId = currentPlaylist?.playlist_id;
     currentPlaylist = { ...data, items };
-    // Resolve localPath for override file too
     overrideData = data.override ? {
       ...data.override,
       localPath: data.override.file_path ? path.join(CACHE_DIR, data.override.file_path) : null,
+      downloaded: data.override.file_path ? fs.existsSync(path.join(CACHE_DIR, data.override.file_path)) : true,
     } : null;
 
-    // Remove cached files not in playlist anymore
     cleanCache(items);
 
     if (data.playlist_id !== prevPlaylistId) {
+      log('INFO', `Playlist changed → ${data.playlist_id}`);
       restartPlayer();
     }
 
     mainWindow?.webContents.send('playlist:sync', { playlist: currentPlaylist, override: overrideData });
   } catch (e) {
-    // Offline — keep playing cached playlist
-    console.log('Sync failed, using cache:', e.message);
+    log('WARN', 'Sync failed (offline?)', e.message);
+    // Offline — keep playing cached playlist, notify renderer to keep going
+    mainWindow?.webContents.send('playlist:sync', { playlist: currentPlaylist, override: overrideData });
   }
 }
 
@@ -209,18 +260,27 @@ function connectToServer(serverUrl, apiKey) {
   });
 
   socket.on('connect', () => {
-    console.log('Connected to server');
+    log('INFO', 'Socket connected');
     syncPlaylist();
   });
 
-  socket.on('playlist:update', () => syncPlaylist());
-  socket.on('override:update', () => syncPlaylist());
+  socket.on('disconnect', (reason) => {
+    log('WARN', 'Socket disconnected', reason);
+  });
+
+  socket.on('connect_error', (err) => {
+    log('ERROR', 'Socket connect error', err.message);
+  });
+
+  socket.on('playlist:update', () => { log('INFO', 'Playlist update received'); syncPlaylist(); });
+  socket.on('override:update', () => { log('INFO', 'Override update received'); syncPlaylist(); });
   socket.on('screen:reboot', () => {
+    log('INFO', 'Reboot command received');
     app.relaunch();
     app.exit(0);
   });
 
-  // Initial sync and periodic heartbeat sync
+  // First sync + periodic re-sync
   syncPlaylist();
   setInterval(() => syncPlaylist(), 60000);
 }

@@ -10,4 +10,8 @@ contextBridge.exposeInMainWorld('lookit', {
     onSync: (cb) => ipcRenderer.on('playlist:sync', (_, data) => cb(data)),
     onRestart: (cb) => ipcRenderer.on('player:restart', () => cb()),
   },
+  logs: {
+    getPath: () => ipcRenderer.invoke('logs:getPath'),
+    openFolder: () => ipcRenderer.invoke('logs:openFolder'),
+  },
 });

@@ -5,7 +5,7 @@
 <title>LoockIT Player</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  html, body { width: 100vw; height: 100vh; overflow: hidden; background: #000; }
+  html, body { width: 100vw; height: 100vh; overflow: hidden; background: #000; font-family: -apple-system, sans-serif; }
 
   #container { width: 100%; height: 100%; position: relative; }
 
@@ -15,72 +15,80 @@
   .slide video { width: 100%; height: 100%; object-fit: contain; }
   webview { width: 100%; height: 100%; border: none; }
 
-  #no-content {
-    position: absolute; inset: 0; display: none; flex-direction: column;
-    align-items: center; justify-content: center; color: #374151; font-family: sans-serif;
+  /* ── Loading / status overlay ── */
+  #overlay {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    background: #000; z-index: 10;
   }
-  #no-content h1 { font-size: 28px; margin-bottom: 8px; }
-  #no-content p { font-size: 14px; }
+  #overlay.hidden { display: none; }
 
-  /* Invisible hover zone — bottom-left corner */
+  .spinner {
+    width: 48px; height: 48px;
+    border: 3px solid rgba(255,255,255,0.1);
+    border-top-color: rgba(255,255,255,0.6);
+    border-radius: 50%;
+    animation: spin 0.9s linear infinite;
+    margin-bottom: 20px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  #overlay-title {
+    font-size: 18px; color: rgba(255,255,255,0.7); font-weight: 500;
+    margin-bottom: 6px;
+  }
+  #overlay-sub {
+    font-size: 13px; color: rgba(255,255,255,0.3);
+  }
+
+  /* ── Corner hover zone ── */
   #corner-zone {
     position: fixed; bottom: 0; left: 0;
-    width: 80px; height: 80px;
-    z-index: 9999;
+    width: 80px; height: 80px; z-index: 9999;
   }
-
   #corner-panel {
     position: fixed; bottom: 16px; left: 16px;
-    background: rgba(10, 10, 20, 0.88);
+    background: rgba(10,10,20,0.88);
     backdrop-filter: blur(8px);
     border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 12px;
-    padding: 14px 16px;
+    border-radius: 12px; padding: 14px 16px;
     opacity: 0; visibility: hidden;
     transition: opacity 0.2s, visibility 0.2s;
-    pointer-events: none;
-    min-width: 220px;
+    pointer-events: none; min-width: 230px;
   }
-  #corner-panel.visible {
-    opacity: 1; visibility: visible; pointer-events: auto;
-  }
-  #corner-panel .label {
-    font-family: monospace; font-size: 11px; color: rgba(255,255,255,0.35);
-    margin-bottom: 4px;
-  }
-  #corner-panel .value {
-    font-family: monospace; font-size: 12px; color: rgba(255,255,255,0.65);
-    margin-bottom: 10px; word-break: break-all;
-  }
+  #corner-panel.visible { opacity: 1; visibility: visible; pointer-events: auto; }
+  #corner-panel .lbl { font-size: 10px; color: rgba(255,255,255,0.3); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 2px; }
+  #corner-panel .val { font-family: monospace; font-size: 11px; color: rgba(255,255,255,0.6); margin-bottom: 10px; word-break: break-all; }
   #corner-panel button {
-    width: 100%; padding: 7px 12px;
-    background: rgba(239,68,68,0.2); color: rgba(239,100,100,0.9);
-    border: 1px solid rgba(239,68,68,0.3); border-radius: 8px;
-    font-size: 12px; cursor: pointer; transition: background 0.2s;
+    width: 100%; padding: 7px 12px; border-radius: 8px;
+    font-size: 12px; cursor: pointer; border: none; margin-top: 4px;
+    transition: background 0.2s;
   }
-  #corner-panel button:hover { background: rgba(239,68,68,0.4); }
+  .btn-danger { background: rgba(239,68,68,0.2); color: rgba(239,100,100,0.9); border: 1px solid rgba(239,68,68,0.3) !important; }
+  .btn-danger:hover { background: rgba(239,68,68,0.4) !important; }
+  .btn-muted  { background: rgba(255,255,255,0.07); color: rgba(255,255,255,0.5); border: 1px solid rgba(255,255,255,0.1) !important; }
+  .btn-muted:hover  { background: rgba(255,255,255,0.12) !important; }
 </style>
 </head>
 <body>
-<div id="container">
-  <div id="no-content">
-    <h1>LoockIT</h1>
-    <p>Плейлист не назначен. Назначь его в панели администратора.</p>
-  </div>
+
+<div id="container"></div>
+
+<!-- Loading / status overlay -->
+<div id="overlay">
+  <div class="spinner" id="spinner"></div>
+  <div id="overlay-title">Подключение к серверу...</div>
+  <div id="overlay-sub"></div>
 </div>
 
-<!-- Invisible hover trigger in bottom-left corner -->
+<!-- Invisible hover trigger -->
 <div id="corner-zone"></div>
-
-<!-- Panel that appears on hover -->
 <div id="corner-panel">
-  <div class="label">Экран</div>
-  <div class="value" id="info-name">—</div>
-  <div class="label">Сервер</div>
-  <div class="value" id="info-server">—</div>
-  <div class="label">Статус</div>
-  <div class="value" id="info-status">—</div>
-  <button onclick="resetDevice()">Перепривязать</button>
+  <div class="lbl">Экран</div><div class="val" id="info-name">—</div>
+  <div class="lbl">Статус</div><div class="val" id="info-status">—</div>
+  <div class="lbl">Файл лога</div><div class="val" id="info-log">—</div>
+  <button class="btn-muted" onclick="openLogs()">Открыть папку с логом</button>
+  <button class="btn-danger" onclick="resetDevice()">Перепривязать</button>
 </div>
 
 <script>
@@ -89,69 +97,58 @@
   let currentIdx = 0;
   let timer = null;
   let activeSlide = null;
+  let skipStreak = 0;
+  let firstSyncDone = false;
 
-  // Corner hover logic
+  // ── Corner hover ──────────────────────────────────────────────
   const zone = document.getElementById('corner-zone');
   const panel = document.getElementById('corner-panel');
   let hideTimer = null;
-
-  zone.addEventListener('mouseenter', () => {
-    clearTimeout(hideTimer);
-    panel.classList.add('visible');
-  });
-  zone.addEventListener('mouseleave', () => {
-    hideTimer = setTimeout(() => { if (!panel.matches(':hover')) panel.classList.remove('visible'); }, 250);
-  });
+  zone.addEventListener('mouseenter', () => { clearTimeout(hideTimer); panel.classList.add('visible'); });
+  zone.addEventListener('mouseleave', () => { hideTimer = setTimeout(() => { if (!panel.matches(':hover')) panel.classList.remove('visible'); }, 250); });
   panel.addEventListener('mouseenter', () => clearTimeout(hideTimer));
-  panel.addEventListener('mouseleave', () => {
-    hideTimer = setTimeout(() => panel.classList.remove('visible'), 250);
-  });
+  panel.addEventListener('mouseleave', () => { hideTimer = setTimeout(() => panel.classList.remove('visible'), 250); });
 
+  async function openLogs() { await window.lookit.logs.openFolder(); }
   async function resetDevice() {
-    if (confirm('Сбросить привязку к серверу?')) {
-      await window.lookit.setup.reset();
+    if (confirm('Сбросить привязку к серверу?')) await window.lookit.setup.reset();
+  }
+
+  // ── Overlay helpers ───────────────────────────────────────────
+  function showOverlay(title, sub, spinner = true) {
+    document.getElementById('overlay').classList.remove('hidden');
+    document.getElementById('overlay-title').textContent = title;
+    document.getElementById('overlay-sub').textContent = sub || '';
+    document.getElementById('spinner').style.display = spinner ? 'block' : 'none';
+  }
+  function hideOverlay() {
+    document.getElementById('overlay').classList.add('hidden');
+  }
+
+  // ── Slide helpers ─────────────────────────────────────────────
+  function clearSlide() {
+    if (activeSlide) {
+      const vid = activeSlide.querySelector('video');
+      if (vid) vid.pause();
+      activeSlide.classList.remove('active');
+      activeSlide.remove();
+      activeSlide = null;
     }
-  }
-
-  function setInfo(name, server, status) {
-    document.getElementById('info-name').textContent = name || '—';
-    document.getElementById('info-server').textContent = server || '—';
-    document.getElementById('info-status').textContent = status || '—';
-  }
-
-  function clearContainer() {
-    const c = document.getElementById('container');
-    const noContent = document.getElementById('no-content');
-    c.innerHTML = '';
-    c.appendChild(noContent);
-    activeSlide = null;
-  }
-
-  function showNoContent() {
-    document.getElementById('no-content').style.display = 'flex';
-  }
-
-  function hideNoContent() {
-    document.getElementById('no-content').style.display = 'none';
   }
 
   function buildSlide(item) {
     const div = document.createElement('div');
     div.className = 'slide';
-
     if (item.type === 'image') {
       const img = document.createElement('img');
-      // Use local cached path if available, otherwise fetch from server
-      img.src = item.localPath ? `file://${item.localPath}` : (item.file_path ? `/api/content/file/${item.file_path}` : '');
+      img.src = item.localPath ? `file://${item.localPath}` : `/api/content/file/${item.file_path}`;
       div.appendChild(img);
     } else if (item.type === 'video') {
       const video = document.createElement('video');
-      video.src = item.localPath ? `file://${item.localPath}` : (item.file_path ? `/api/content/file/${item.file_path}` : '');
-      video.muted = true; // start muted to guarantee autoplay, then unmute
+      video.src = item.localPath ? `file://${item.localPath}` : `/api/content/file/${item.file_path}`;
+      video.muted = true;
       video.autoplay = true;
-      video.loop = false;
       video.playsInline = true;
-      // Unmute after playback starts (autoplay requires muted initially)
       video.addEventListener('playing', () => { video.muted = false; }, { once: true });
       div.appendChild(video);
     } else if (item.type === 'url') {
@@ -160,104 +157,158 @@
       wv.setAttribute('allowpopups', 'false');
       div.appendChild(wv);
     }
-
     return div;
   }
 
   function showItem(item, duration, onDone) {
     clearTimeout(timer);
-    const c = document.getElementById('container');
+    clearSlide();
+    hideOverlay();
 
-    if (activeSlide) {
-      const vid = activeSlide.querySelector('video');
-      if (vid) vid.pause();
-      activeSlide.classList.remove('active');
-      activeSlide.remove();
-    }
-
-    hideNoContent();
     const slide = buildSlide(item);
-    c.appendChild(slide);
+    document.getElementById('container').appendChild(slide);
     slide.classList.add('active');
     activeSlide = slide;
 
+    document.getElementById('info-status').textContent = `${item.name} · ${item.type}`;
+
     if (item.type === 'video') {
       const vid = slide.querySelector('video');
-      vid.onerror = () => {
-        // Codec not supported or file corrupt — skip after 2s
-        console.warn('Video error, skipping:', item.name);
-        clearTimeout(timer);
-        timer = setTimeout(onDone, 2000);
-      };
-      vid.play().catch(err => {
-        console.warn('Video play() failed:', err.message);
-        // Try muted as fallback
+      vid.onerror = () => { clearTimeout(timer); timer = setTimeout(onDone, 1500); };
+      vid.play().catch(() => {
         vid.muted = true;
-        vid.play().catch(() => { timer = setTimeout(onDone, 2000); });
+        vid.play().catch(() => { timer = setTimeout(onDone, 1500); });
       });
       vid.onended = onDone;
       if (duration) timer = setTimeout(onDone, duration * 1000);
     } else {
       timer = setTimeout(onDone, duration * 1000);
     }
-
-    setInfo(
-      playlist?.items?.[currentIdx - 1]?.name || item.name,
-      null,
-      `${item.type} · ${item.duration_seconds || duration}с`
-    );
   }
 
+  // ── Playback logic ────────────────────────────────────────────
   function isOverrideActive() {
     if (!override) return false;
     const now = new Date();
     return new Date(override.start_at) <= now && now <= new Date(override.end_at);
   }
 
+  function countPlayable() {
+    if (!playlist?.items) return 0;
+    return playlist.items.filter(i => i.downloaded !== false).length;
+  }
+
   function playNext() {
     clearTimeout(timer);
 
-    if (isOverrideActive()) {
-      const msLeft = new Date(override.end_at) - new Date();
-      showItem(
-        { type: override.type, name: override.name, localPath: override.localPath, file_path: override.file_path, url: override.url },
-        Math.max(Math.ceil(msLeft / 1000), 1),
-        playNext
-      );
+    // Show loading if no sync yet
+    if (!firstSyncDone) {
+      showOverlay('Подключение к серверу...', '');
       return;
     }
 
+    // No playlist assigned
     if (!playlist || !playlist.items || playlist.items.length === 0) {
-      showNoContent();
-      setInfo('—', null, 'Нет плейлиста');
+      showOverlay('Нет плейлиста', 'Назначь плейлист в панели администратора', false);
       return;
     }
 
+    // All items not downloaded yet
+    if (countPlayable() === 0) {
+      const total = playlist.items.length;
+      showOverlay('Загрузка контента...', `Загружается ${total} файл(ов)...`);
+      timer = setTimeout(playNext, 4000);
+      return;
+    }
+
+    // Override check
+    if (isOverrideActive()) {
+      if (override.downloaded !== false) {
+        const msLeft = Math.max(Math.ceil((new Date(override.end_at) - new Date()) / 1000), 1);
+        showItem(
+          { type: override.type, name: override.name, localPath: override.localPath, file_path: override.file_path, url: override.url },
+          msLeft, playNext
+        );
+      } else {
+        // Override file not downloaded — wait
+        timer = setTimeout(playNext, 3000);
+      }
+      return;
+    }
+
+    // Normal playlist playback
     if (currentIdx >= playlist.items.length) currentIdx = 0;
+
+    // Protect against infinite skip loop
+    if (skipStreak >= playlist.items.length) {
+      skipStreak = 0;
+      const ready = countPlayable();
+      showOverlay('Загрузка контента...', `Готово ${ready} из ${playlist.items.length}`);
+      timer = setTimeout(playNext, 4000);
+      return;
+    }
+
     const item = playlist.items[currentIdx];
     currentIdx = (currentIdx + 1) % playlist.items.length;
 
+    // Skip if file not yet on disk
+    if (item.file_path && item.downloaded === false) {
+      skipStreak++;
+      playNext();
+      return;
+    }
+
+    skipStreak = 0;
     showItem(item, item.duration_seconds || 10, playNext);
   }
 
+  // ── Init ──────────────────────────────────────────────────────
   async function init() {
+    // Show log path in corner panel
+    const logPath = await window.lookit.logs.getPath();
+    document.getElementById('info-log').textContent = logPath || '—';
+
+    // Try to get already-loaded playlist (e.g. after setup)
     const data = await window.lookit.player.getPlaylist();
-    if (data) {
+    if (data?.playlist) {
+      firstSyncDone = true;
       playlist = data.playlist;
       override = data.override;
+      document.getElementById('info-name').textContent = data.playlist?.items?.[0]?.name || '—';
     }
+
     playNext();
 
+    // Listen for sync updates
     window.lookit.player.onSync((data) => {
+      firstSyncDone = true;
       const wasPlaylistId = playlist?.playlist_id;
       playlist = data.playlist;
       override = data.override;
-      if (isOverrideActive()) { clearTimeout(timer); playNext(); }
-      else if (playlist?.playlist_id !== wasPlaylistId) { currentIdx = 0; playNext(); }
+
+      if (isOverrideActive()) {
+        clearTimeout(timer);
+        skipStreak = 0;
+        playNext();
+      } else if (!wasPlaylistId && playlist?.items?.length > 0) {
+        // First time getting a playlist
+        skipStreak = 0;
+        currentIdx = 0;
+        playNext();
+      } else if (playlist?.playlist_id !== wasPlaylistId) {
+        skipStreak = 0;
+        currentIdx = 0;
+        playNext();
+      } else if (!activeSlide) {
+        // Was on loading screen, now has content
+        skipStreak = 0;
+        playNext();
+      }
     });
 
     window.lookit.player.onRestart(() => {
       currentIdx = 0;
+      skipStreak = 0;
       playNext();
     });
   }
