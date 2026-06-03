@@ -160,7 +160,11 @@ async function syncPlaylist() {
 
     const prevPlaylistId = currentPlaylist?.playlist_id;
     currentPlaylist = { ...data, items };
-    overrideData = data.override;
+    // Resolve localPath for override file too
+    overrideData = data.override ? {
+      ...data.override,
+      localPath: data.override.file_path ? path.join(CACHE_DIR, data.override.file_path) : null,
+    } : null;
 
     // Remove cached files not in playlist anymore
     cleanCache(items);
@@ -205,6 +209,10 @@ function connectToServer(serverUrl, apiKey) {
 
   socket.on('playlist:update', () => syncPlaylist());
   socket.on('override:update', () => syncPlaylist());
+  socket.on('screen:reboot', () => {
+    app.relaunch();
+    app.exit(0);
+  });
 
   // Initial sync and periodic heartbeat sync
   syncPlaylist();

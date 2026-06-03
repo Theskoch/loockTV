@@ -2,6 +2,7 @@ import { Routes, Route, Navigate, Link, useLocation } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import LoginPage from './pages/LoginPage'
 import ScreensPage from './pages/ScreensPage'
+import ScreenDetailPage from './pages/ScreenDetailPage'
 import PlaylistsPage from './pages/PlaylistsPage'
 import ContentPage from './pages/ContentPage'
 import { api } from './api'
@@ -59,6 +60,7 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/screens" element={<ProtectedRoute><ScreensPage /></ProtectedRoute>} />
+      <Route path="/screens/:id" element={<ProtectedRoute><ScreenDetailPage /></ProtectedRoute>} />
       <Route path="/playlists" element={<ProtectedRoute><PlaylistsPage /></ProtectedRoute>} />
       <Route path="/content" element={<ProtectedRoute><ContentPage /></ProtectedRoute>} />
       <Route path="*" element={<Navigate to="/screens" replace />} />

@@ -19,6 +19,35 @@ router.get('/', adminAuth, async (req, res) => {
   res.json(rows);
 });
 
+router.get('/:id', adminAuth, async (req, res) => {
+  const { rows } = await pool.query(`
+    SELECT s.*, p.name AS playlist_name,
+      CASE WHEN s.last_seen > NOW() - INTERVAL '1 minute' THEN true ELSE false END AS online
+    FROM screens s
+    LEFT JOIN playlists p ON p.id = s.current_playlist_id
+    WHERE s.id = $1
+  `, [req.params.id]);
+  if (rows.length === 0) return res.status(404).json({ error: 'Not found' });
+  res.json(rows[0]);
+});
+
+router.get('/:id/overrides', adminAuth, async (req, res) => {
+  const { rows } = await pool.query(`
+    SELECT so.*, c.name, c.type, c.file_path, c.url
+    FROM screen_overrides so
+    JOIN content c ON c.id = so.content_id
+    WHERE so.screen_id = $1
+    ORDER BY so.start_at DESC
+  `, [req.params.id]);
+  res.json(rows);
+});
+
+router.post('/:id/reboot', adminAuth, async (req, res) => {
+  const io = req.app.get('io');
+  io.to(`screen:${req.params.id}`).emit('screen:reboot');
+  res.json({ ok: true });
+});
+
 router.post('/', adminAuth, async (req, res) => {
   const { name } = req.body;
   if (!name) return res.status(400).json({ error: 'Name required' });

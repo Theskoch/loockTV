@@ -11,32 +11,54 @@
 
   .slide { position: absolute; inset: 0; display: none; }
   .slide.active { display: flex; align-items: center; justify-content: center; }
-
   .slide img { max-width: 100%; max-height: 100%; object-fit: contain; }
   .slide video { width: 100%; height: 100%; object-fit: contain; }
   webview { width: 100%; height: 100%; border: none; }
 
-  #status {
-    position: fixed; bottom: 16px; right: 16px;
-    background: rgba(0,0,0,0.6); color: rgba(255,255,255,0.5);
-    font-family: monospace; font-size: 11px; padding: 6px 10px; border-radius: 6px;
-    pointer-events: none; z-index: 9999;
-  }
   #no-content {
-    position: absolute; inset: 0; display: flex; flex-direction: column;
+    position: absolute; inset: 0; display: none; flex-direction: column;
     align-items: center; justify-content: center; color: #374151; font-family: sans-serif;
   }
   #no-content h1 { font-size: 28px; margin-bottom: 8px; }
   #no-content p { font-size: 14px; }
 
-  #reset-btn {
-    position: fixed; bottom: 16px; left: 16px;
-    background: rgba(0,0,0,0.4); color: rgba(255,255,255,0.3);
-    border: 1px solid rgba(255,255,255,0.1); font-size: 11px;
-    padding: 5px 10px; border-radius: 6px; cursor: pointer;
-    z-index: 9999; font-family: monospace;
+  /* Invisible hover zone — bottom-left corner */
+  #corner-zone {
+    position: fixed; bottom: 0; left: 0;
+    width: 80px; height: 80px;
+    z-index: 9999;
   }
-  #reset-btn:hover { color: rgba(255,100,100,0.8); }
+
+  #corner-panel {
+    position: fixed; bottom: 16px; left: 16px;
+    background: rgba(10, 10, 20, 0.88);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 12px;
+    padding: 14px 16px;
+    opacity: 0; visibility: hidden;
+    transition: opacity 0.2s, visibility 0.2s;
+    pointer-events: none;
+    min-width: 220px;
+  }
+  #corner-panel.visible {
+    opacity: 1; visibility: visible; pointer-events: auto;
+  }
+  #corner-panel .label {
+    font-family: monospace; font-size: 11px; color: rgba(255,255,255,0.35);
+    margin-bottom: 4px;
+  }
+  #corner-panel .value {
+    font-family: monospace; font-size: 12px; color: rgba(255,255,255,0.65);
+    margin-bottom: 10px; word-break: break-all;
+  }
+  #corner-panel button {
+    width: 100%; padding: 7px 12px;
+    background: rgba(239,68,68,0.2); color: rgba(239,100,100,0.9);
+    border: 1px solid rgba(239,68,68,0.3); border-radius: 8px;
+    font-size: 12px; cursor: pointer; transition: background 0.2s;
+  }
+  #corner-panel button:hover { background: rgba(239,68,68,0.4); }
 </style>
 </head>
 <body>
@@ -46,8 +68,20 @@
     <p>Плейлист не назначен. Назначь его в панели администратора.</p>
   </div>
 </div>
-<div id="status">...</div>
-<button id="reset-btn" onclick="resetDevice()">Перепривязать</button>
+
+<!-- Invisible hover trigger in bottom-left corner -->
+<div id="corner-zone"></div>
+
+<!-- Panel that appears on hover -->
+<div id="corner-panel">
+  <div class="label">Экран</div>
+  <div class="value" id="info-name">—</div>
+  <div class="label">Сервер</div>
+  <div class="value" id="info-server">—</div>
+  <div class="label">Статус</div>
+  <div class="value" id="info-status">—</div>
+  <button onclick="resetDevice()">Перепривязать</button>
+</div>
 
 <script>
   let playlist = null;
@@ -56,14 +90,33 @@
   let timer = null;
   let activeSlide = null;
 
+  // Corner hover logic
+  const zone = document.getElementById('corner-zone');
+  const panel = document.getElementById('corner-panel');
+  let hideTimer = null;
+
+  zone.addEventListener('mouseenter', () => {
+    clearTimeout(hideTimer);
+    panel.classList.add('visible');
+  });
+  zone.addEventListener('mouseleave', () => {
+    hideTimer = setTimeout(() => { if (!panel.matches(':hover')) panel.classList.remove('visible'); }, 250);
+  });
+  panel.addEventListener('mouseenter', () => clearTimeout(hideTimer));
+  panel.addEventListener('mouseleave', () => {
+    hideTimer = setTimeout(() => panel.classList.remove('visible'), 250);
+  });
+
   async function resetDevice() {
     if (confirm('Сбросить привязку к серверу?')) {
       await window.lookit.setup.reset();
     }
   }
 
-  function setStatus(text) {
-    document.getElementById('status').textContent = text;
+  function setInfo(name, server, status) {
+    document.getElementById('info-name').textContent = name || '—';
+    document.getElementById('info-server').textContent = server || '—';
+    document.getElementById('info-status').textContent = status || '—';
   }
 
   function clearContainer() {
@@ -88,11 +141,12 @@
 
     if (item.type === 'image') {
       const img = document.createElement('img');
-      img.src = item.localPath ? `file://${item.localPath}` : `/api/content/file/${item.file_path}`;
+      // Use local cached path if available, otherwise fetch from server
+      img.src = item.localPath ? `file://${item.localPath}` : (item.file_path ? `/api/content/file/${item.file_path}` : '');
       div.appendChild(img);
     } else if (item.type === 'video') {
       const video = document.createElement('video');
-      video.src = item.localPath ? `file://${item.localPath}` : `/api/content/file/${item.file_path}`;
+      video.src = item.localPath ? `file://${item.localPath}` : (item.file_path ? `/api/content/file/${item.file_path}` : '');
       video.muted = false;
       video.autoplay = true;
       video.loop = false;
@@ -128,13 +182,16 @@
       const vid = slide.querySelector('video');
       vid.play().catch(() => {});
       vid.onended = onDone;
-      // fallback in case video is shorter or duration set explicitly
       if (duration) timer = setTimeout(onDone, duration * 1000);
     } else {
       timer = setTimeout(onDone, duration * 1000);
     }
 
-    setStatus(`${item.name} (${item.type})`);
+    setInfo(
+      playlist?.items?.[currentIdx - 1]?.name || item.name,
+      null,
+      `${item.type} · ${item.duration_seconds || duration}с`
+    );
   }
 
   function isOverrideActive() {
@@ -147,25 +204,18 @@
     clearTimeout(timer);
 
     if (isOverrideActive()) {
+      const msLeft = new Date(override.end_at) - new Date();
       showItem(
-        {
-          type: override.type,
-          name: override.name,
-          localPath: override.file_path ? null : null,
-          file_path: override.file_path,
-          url: override.url,
-        },
-        10,
+        { type: override.type, name: override.name, localPath: override.localPath, file_path: override.file_path, url: override.url },
+        Math.max(Math.ceil(msLeft / 1000), 1),
         playNext
       );
-      const msLeft = new Date(override.end_at) - new Date();
-      timer = setTimeout(playNext, Math.max(msLeft, 0));
       return;
     }
 
     if (!playlist || !playlist.items || playlist.items.length === 0) {
       showNoContent();
-      setStatus('Нет плейлиста');
+      setInfo('—', null, 'Нет плейлиста');
       return;
     }
 
@@ -188,11 +238,8 @@
       const wasPlaylistId = playlist?.playlist_id;
       playlist = data.playlist;
       override = data.override;
-      if (isOverrideActive()) playNext();
-      else if (playlist?.playlist_id !== wasPlaylistId) {
-        currentIdx = 0;
-        playNext();
-      }
+      if (isOverrideActive()) { clearTimeout(timer); playNext(); }
+      else if (playlist?.playlist_id !== wasPlaylistId) { currentIdx = 0; playNext(); }
     });
 
     window.lookit.player.onRestart(() => {

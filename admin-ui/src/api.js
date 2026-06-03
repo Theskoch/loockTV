@@ -33,10 +33,13 @@ export const api = {
 
   screens: {
     list: () => request('GET', '/screens'),
+    get: (id) => request('GET', `/screens/${id}`),
     create: (name) => request('POST', '/screens', { name }),
     update: (id, data) => request('PUT', `/screens/${id}`, data),
     delete: (id) => request('DELETE', `/screens/${id}`),
     regenerateKey: (id) => request('POST', `/screens/${id}/regenerate-key`),
+    reboot: (id) => request('POST', `/screens/${id}/reboot`),
+    getOverrides: (id) => request('GET', `/screens/${id}/overrides`),
     setOverride: (id, data) => request('POST', `/screens/${id}/override`, data),
     deleteOverride: (id, oid) => request('DELETE', `/screens/${id}/override/${oid}`),
   },
