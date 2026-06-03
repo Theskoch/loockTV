@@ -22,7 +22,7 @@ function DropLine({ onDrop, active }) {
 function PlaylistEditor({ playlist, content, onSave, onClose }) {
   const [name, setName] = useState(playlist?.name || '')
   const [items, setItems] = useState(
-    playlist?.items?.map(i => ({ content_id: i.content_id, duration_seconds: i.duration_seconds, _name: i.name, _type: i.type, _key: Math.random() })) || []
+    playlist?.items?.map(i => ({ content_id: i.content_id, duration_seconds: i.duration_seconds, _dur: String(i.duration_seconds), _name: i.name, _type: i.type, _key: Math.random() })) || []
   )
   const [loading, setLoading] = useState(false)
   const [search, setSearch] = useState('')
@@ -100,11 +100,23 @@ function PlaylistEditor({ playlist, content, onSave, onClose }) {
   }
 
   function addFromContent(c) {
-    setItems(prev => [...prev, { content_id: c.id, duration_seconds: 10, _name: c.name, _type: c.type, _key: Math.random() }])
+    setItems(prev => [...prev, { content_id: c.id, duration_seconds: 10, _dur: '10', _name: c.name, _type: c.type, _key: Math.random() }])
   }
 
-  function updateDuration(idx, val) {
-    setItems(prev => prev.map((x, i) => i === idx ? { ...x, duration_seconds: parseInt(val) || 10 } : x))
+  // While typing: only update display string, allow empty
+  function onDurChange(idx, val) {
+    if (/^\d*$/.test(val)) // only digits or empty
+      setItems(prev => prev.map((x, i) => i === idx ? { ...x, _dur: val } : x))
+  }
+
+  // On blur: commit value, default to 10 if empty/zero
+  function onDurBlur(idx) {
+    setItems(prev => prev.map((x, i) => {
+      if (i !== idx) return x
+      const n = parseInt(x._dur)
+      const seconds = (!n || n < 1) ? 10 : Math.min(n, 3600)
+      return { ...x, duration_seconds: seconds, _dur: String(seconds) }
+    }))
   }
 
   async function submit(e) {
@@ -186,16 +198,23 @@ function PlaylistEditor({ playlist, content, onSave, onClose }) {
                         <span className="text-gray-600 text-xs w-5 text-center shrink-0">{idx + 1}</span>
                         <span className="text-base shrink-0">{TYPE_ICONS[item._type] || '📄'}</span>
                         <span className="flex-1 text-sm text-white truncate">{item._name}</span>
-                        <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                        {/* Duration — always visible */}
+                        <div className="flex items-center gap-1 shrink-0">
                           <input
-                            type="number" min="1" max="3600"
-                            value={item.duration_seconds}
-                            onChange={e => updateDuration(idx, e.target.value)}
+                            type="text"
+                            inputMode="numeric"
+                            value={item._dur}
+                            onChange={e => onDurChange(idx, e.target.value)}
+                            onBlur={() => onDurBlur(idx)}
                             onClick={e => e.stopPropagation()}
                             onDragStart={e => e.stopPropagation()}
-                            className="w-14 bg-gray-800 rounded px-2 py-1 text-xs text-white text-center outline-none cursor-text"
+                            placeholder="10"
+                            className="w-12 bg-gray-800 rounded px-2 py-1 text-xs text-white text-center outline-none focus:ring-1 focus:ring-indigo-500 cursor-text"
                           />
-                          <span className="text-xs text-gray-600">с</span>
+                          <span className="text-xs text-gray-500">с</span>
+                        </div>
+                        {/* Controls — hover only */}
+                        <div className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
                           <button type="button" onClick={() => moveItem(idx, -1)} className="text-gray-500 hover:text-white px-1 text-sm">↑</button>
                           <button type="button" onClick={() => moveItem(idx, 1)} className="text-gray-500 hover:text-white px-1 text-sm">↓</button>
                           <button type="button" onClick={() => removeItem(idx)} className="text-red-500 hover:text-red-400 px-1 text-sm ml-1">✕</button>
