@@ -349,15 +349,18 @@ function connectToServer(serverUrl, apiKey) {
 
   socket.on('connect', () => {
     log('INFO', 'Socket connected');
+    mainWindow?.webContents.send('server:status', { connected: true });
     syncPlaylist();
   });
 
   socket.on('disconnect', (reason) => {
     log('WARN', 'Socket disconnected', reason);
+    mainWindow?.webContents.send('server:status', { connected: false, reason });
   });
 
   socket.on('connect_error', (err) => {
     log('ERROR', 'Socket connect error', err.message);
+    mainWindow?.webContents.send('server:status', { connected: false, reason: err.message });
   });
 
   socket.on('playlist:update', () => { log('INFO', 'Playlist update received'); syncPlaylist(); });

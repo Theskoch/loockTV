@@ -20,4 +20,7 @@ contextBridge.exposeInMainWorld('lookit', {
   updates: {
     onStatus: (cb) => ipcRenderer.on('update:status', (_, data) => cb(data)),
   },
+  server: {
+    onStatus: (cb) => ipcRenderer.on('server:status', (_, data) => cb(data)),
+  },
 });
