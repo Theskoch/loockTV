@@ -36,7 +36,8 @@
     "publish": {
       "provider": "github",
       "owner": "Theskoch",
-      "repo": "loockTV"
+      "repo": "loockTV",
+      "releaseType": "release"
     }
   }
 }
