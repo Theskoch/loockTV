@@ -30,6 +30,7 @@ async function request(method, path, body, isForm = false) {
 export const api = {
   login: (u, p) => request('POST', '/admin/login', { username: u, password: p }),
   me: () => request('GET', '/admin/me'),
+  getLatestVersion: () => request('GET', '/admin/latest-version'),
 
   screens: {
     list: () => request('GET', '/screens'),
@@ -39,6 +40,7 @@ export const api = {
     delete: (id) => request('DELETE', `/screens/${id}`),
     regenerateKey: (id) => request('POST', `/screens/${id}/regenerate-key`),
     reboot: (id) => request('POST', `/screens/${id}/reboot`),
+    sendUpdate: (id) => request('POST', `/screens/${id}/update`),
     getOverrides: (id) => request('GET', `/screens/${id}/overrides`),
     setOverride: (id, data) => request('POST', `/screens/${id}/override`, data),
     deleteOverride: (id, oid) => request('DELETE', `/screens/${id}/override/${oid}`),

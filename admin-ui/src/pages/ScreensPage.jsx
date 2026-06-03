@@ -12,6 +12,7 @@ export default function ScreensPage() {
   const [loading, setLoading] = useState(true)
   const [keyModal, setKeyModal] = useState(null)
   const [copied, setCopied] = useState(false)
+  const [latestVersion, setLatestVersion] = useState(null)
   const nav = useNavigate()
 
   const load = useCallback(async () => {
@@ -20,8 +21,19 @@ export default function ScreensPage() {
     setLoading(false)
   }, [])
 
+  function compareVersions(a, b) {
+    if (!a || !b) return 0
+    const pa = a.split('.').map(Number), pb = b.split('.').map(Number)
+    for (let i = 0; i < 3; i++) {
+      if ((pa[i] || 0) < (pb[i] || 0)) return -1
+      if ((pa[i] || 0) > (pb[i] || 0)) return 1
+    }
+    return 0
+  }
+
   useEffect(() => {
     load()
+    api.getLatestVersion().then(d => setLatestVersion(d.version)).catch(() => {})
     const t = setInterval(load, 15000)
     return () => clearInterval(t)
   }, [load])
@@ -77,7 +89,9 @@ export default function ScreensPage() {
                 </div>
               </div>
               {screen.app_version && (
-                <span className="text-xs text-gray-600 font-mono shrink-0">v{screen.app_version}</span>
+                <span className={`text-xs font-mono shrink-0 ${compareVersions(screen.app_version, latestVersion) < 0 ? 'text-yellow-500' : 'text-gray-600'}`}>
+                  v{screen.app_version}{compareVersions(screen.app_version, latestVersion) < 0 ? ' ↑' : ''}
+                </span>
               )}
               {screen.playlist_name && (
                 <span className="text-xs text-gray-500 bg-gray-800 px-2.5 py-1 rounded-lg shrink-0">

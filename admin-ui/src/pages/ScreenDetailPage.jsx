@@ -205,7 +205,9 @@ export default function ScreenDetailPage() {
   const [content, setContent] = useState([])
   const [loading, setLoading] = useState(true)
   const [rebooting, setRebooting] = useState(false)
+  const [updating, setUpdating] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [latestVersion, setLatestVersion] = useState(null)
 
   const load = useCallback(async () => {
     const [s, p, c] = await Promise.all([api.screens.get(id), api.playlists.list(), api.content.list()])
@@ -217,6 +219,7 @@ export default function ScreenDetailPage() {
 
   useEffect(() => {
     load()
+    api.getLatestVersion().then(d => setLatestVersion(d.version)).catch(() => {})
     const t = setInterval(() => api.screens.get(id).then(setScreen).catch(() => {}), 15000)
     return () => clearInterval(t)
   }, [load, id])
@@ -231,6 +234,26 @@ export default function ScreenDetailPage() {
     await api.screens.reboot(id).catch(() => {})
     setTimeout(() => setRebooting(false), 3000)
   }
+
+  async function sendUpdate() {
+    setUpdating(true)
+    await api.screens.sendUpdate(id).catch(() => {})
+    setTimeout(() => setUpdating(false), 5000)
+  }
+
+  function compareVersions(a, b) {
+    if (!a || !b) return 0
+    const pa = a.split('.').map(Number)
+    const pb = b.split('.').map(Number)
+    for (let i = 0; i < 3; i++) {
+      if ((pa[i] || 0) < (pb[i] || 0)) return -1
+      if ((pa[i] || 0) > (pb[i] || 0)) return 1
+    }
+    return 0
+  }
+
+  const updateAvailable = latestVersion && screen?.app_version &&
+    compareVersions(screen.app_version, latestVersion) < 0
 
   async function regenerateKey() {
     const updated = await api.screens.regenerateKey(id)
@@ -276,14 +299,21 @@ export default function ScreenDetailPage() {
         <div className="bg-gray-900 rounded-xl p-5">
           <div className="flex items-start justify-between mb-3">
             <h3 className="font-medium text-white">Статус</h3>
-            {screen.app_version && (
-              <span className="text-xs bg-gray-800 text-gray-400 px-2 py-0.5 rounded-full font-mono">
-                v{screen.app_version}
-              </span>
-            )}
+            <div className="flex items-center gap-2">
+              {screen.app_version && (
+                <span className="text-xs bg-gray-800 text-gray-400 px-2 py-0.5 rounded-full font-mono">
+                  v{screen.app_version}
+                </span>
+              )}
+              {updateAvailable && (
+                <span className="text-xs bg-yellow-900/40 text-yellow-400 px-2 py-0.5 rounded-full">
+                  → v{latestVersion} доступно
+                </span>
+              )}
+            </div>
           </div>
           <div className="text-sm text-gray-400">{uptimeText}</div>
-          <div className="flex gap-2 mt-4">
+          <div className="flex gap-2 mt-4 flex-wrap">
             <button
               onClick={reboot}
               disabled={!screen.online || rebooting}
@@ -291,6 +321,15 @@ export default function ScreenDetailPage() {
             >
               {rebooting ? 'Перезагружается...' : 'Перезагрузить'}
             </button>
+            {updateAvailable && (
+              <button
+                onClick={sendUpdate}
+                disabled={!screen.online || updating}
+                className="bg-yellow-700/60 hover:bg-yellow-600/80 disabled:opacity-40 text-yellow-100 text-sm rounded-lg px-4 py-2 transition-colors"
+              >
+                {updating ? 'Команда отправлена...' : `Обновить до v${latestVersion}`}
+              </button>
+            )}
           </div>
         </div>
 

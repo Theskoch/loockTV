@@ -1,4 +1,5 @@
 const { app, BrowserWindow, ipcMain, screen: electronScreen, shell } = require('electron');
+const { autoUpdater } = require('electron-updater');
 
 // Allow video autoplay without user gesture (needed for signage)
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
@@ -63,6 +64,7 @@ if (!fs.existsSync(CACHE_DIR)) fs.mkdirSync(CACHE_DIR, { recursive: true });
 app.whenReady().then(async () => {
   initLogger();
   store = await getStore();
+  setupAutoUpdater();
   loadCachedPlaylist(); // load from disk before window opens
   createWindow();
 });
@@ -141,6 +143,55 @@ ipcMain.handle('logs:openFolder', () => {
 
 // IPC: App info
 ipcMain.handle('app:getVersion', () => app.getVersion());
+
+// ─── Auto-updater ────────────────────────────────────────────────────────
+function setupAutoUpdater() {
+  autoUpdater.autoDownload = false;
+  autoUpdater.autoInstallOnAppQuit = false;
+
+  // Pipe updater logs into our file logger
+  autoUpdater.logger = {
+    info:  (...a) => log('INFO',  '[updater]', ...a),
+    warn:  (...a) => log('WARN',  '[updater]', ...a),
+    error: (...a) => log('ERROR', '[updater]', ...a),
+    debug: () => {},
+  };
+
+  autoUpdater.on('update-available', (info) => {
+    log('INFO', `Update available: v${info.version}`);
+    mainWindow?.webContents.send('update:status', { stage: 'downloading', version: info.version, percent: 0 });
+    autoUpdater.downloadUpdate();
+  });
+
+  autoUpdater.on('download-progress', (p) => {
+    const percent = Math.round(p.percent);
+    mainWindow?.webContents.send('update:status', { stage: 'downloading', percent });
+  });
+
+  autoUpdater.on('update-downloaded', (info) => {
+    log('INFO', `Update downloaded: v${info.version} — installing in 3s`);
+    mainWindow?.webContents.send('update:status', { stage: 'installing', version: info.version });
+    setTimeout(() => autoUpdater.quitAndInstall(true, true), 3000);
+  });
+
+  autoUpdater.on('update-not-available', () => {
+    log('INFO', 'Already up to date');
+    mainWindow?.webContents.send('update:status', { stage: 'up-to-date' });
+  });
+
+  autoUpdater.on('error', (err) => {
+    log('ERROR', 'Update error:', err.message);
+    mainWindow?.webContents.send('update:status', { stage: 'error', message: err.message });
+  });
+}
+
+function checkForUpdate() {
+  if (!app.isPackaged) {
+    log('INFO', 'Skipping update check in dev mode');
+    return;
+  }
+  autoUpdater.checkForUpdates().catch(e => log('ERROR', 'Update check failed', e.message));
+}
 
 // ─── Network helpers ──────────────────────────────────────────────────────
 function fetchJson(url, apiKey) {
@@ -315,6 +366,11 @@ function connectToServer(serverUrl, apiKey) {
     log('INFO', 'Reboot command received');
     app.relaunch();
     app.exit(0);
+  });
+
+  socket.on('screen:update', () => {
+    log('INFO', 'Update command received');
+    checkForUpdate();
   });
 
   // First sync + periodic re-sync

@@ -48,6 +48,12 @@ router.post('/:id/reboot', adminAuth, async (req, res) => {
   res.json({ ok: true });
 });
 
+router.post('/:id/update', adminAuth, async (req, res) => {
+  const io = req.app.get('io');
+  io.to(`screen:${req.params.id}`).emit('screen:update');
+  res.json({ ok: true });
+});
+
 router.post('/', adminAuth, async (req, res) => {
   const { name } = req.body;
   if (!name) return res.status(400).json({ error: 'Name required' });

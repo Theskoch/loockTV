@@ -17,4 +17,7 @@ contextBridge.exposeInMainWorld('lookit', {
   app: {
     getVersion: () => ipcRenderer.invoke('app:getVersion'),
   },
+  updates: {
+    onStatus: (cb) => ipcRenderer.on('update:status', (_, data) => cb(data)),
+  },
 });

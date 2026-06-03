@@ -284,6 +284,23 @@
 
     playNext();
 
+    // Listen for update progress
+    window.lookit.updates.onStatus((data) => {
+      if (data.stage === 'downloading') {
+        showOverlay(
+          `Обновление до v${data.version || '...'}`,
+          `Загрузка... ${data.percent ?? 0}%`
+        );
+      } else if (data.stage === 'installing') {
+        showOverlay(`Установка v${data.version}`, 'Приложение перезапустится через несколько секунд...');
+      } else if (data.stage === 'error') {
+        // Show error briefly then resume playback
+        showOverlay('Ошибка обновления', data.message || '', false);
+        setTimeout(() => { if (!activeSlide) playNext(); else hideOverlay(); }, 4000);
+      }
+      // up-to-date: do nothing, keep playing
+    });
+
     // Listen for sync updates from server
     window.lookit.player.onSync((data) => {
       const wasPlaylistId = playlist?.playlist_id;

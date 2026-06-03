@@ -21,4 +21,17 @@ router.get('/me', adminAuth, (req, res) => {
   res.json({ ok: true });
 });
 
+router.get('/latest-version', adminAuth, async (req, res) => {
+  try {
+    const r = await fetch('https://api.github.com/repos/Theskoch/loockTV/releases/latest', {
+      headers: { 'User-Agent': 'LoockIT-Server/1.0' },
+    });
+    if (!r.ok) return res.json({ version: null });
+    const data = await r.json();
+    res.json({ version: data.tag_name?.replace(/^v/, '') || null });
+  } catch {
+    res.json({ version: null });
+  }
+});
+
 module.exports = router;
