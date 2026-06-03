@@ -33,12 +33,16 @@
   }
   @keyframes spin { to { transform: rotate(360deg); } }
 
+  #overlay-logo {
+    font-size: 42px; font-weight: 800; letter-spacing: -1px;
+    color: rgba(255,255,255,0.9); margin-bottom: 40px;
+  }
   #overlay-title {
-    font-size: 18px; color: rgba(255,255,255,0.7); font-weight: 500;
+    font-size: 16px; color: rgba(255,255,255,0.5); font-weight: 500;
     margin-bottom: 6px;
   }
   #overlay-sub {
-    font-size: 13px; color: rgba(255,255,255,0.3);
+    font-size: 13px; color: rgba(255,255,255,0.25);
   }
 
   /* ── Corner hover zone ── */
@@ -76,6 +80,7 @@
 
 <!-- Loading / status overlay -->
 <div id="overlay">
+  <div id="overlay-logo">LoockIT</div>
   <div class="spinner" id="spinner"></div>
   <div id="overlay-title">Подключение к серверу...</div>
   <div id="overlay-sub"></div>
