@@ -1,4 +1,10 @@
 const { app, BrowserWindow, ipcMain, screen: electronScreen } = require('electron');
+
+// Allow video autoplay without user gesture (needed for signage)
+app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
+// Enable proprietary codecs (H.264, AAC) on Windows
+app.commandLine.appendSwitch('enable-features', 'PlatformHEVCDecoderSupport');
+app.commandLine.appendSwitch('disable-features', 'MediaCapabilitiesQueryGpuFactories');
 const path = require('path');
 const fs = require('fs');
 const https = require('https');

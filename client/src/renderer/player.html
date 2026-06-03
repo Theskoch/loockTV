@@ -147,9 +147,12 @@
     } else if (item.type === 'video') {
       const video = document.createElement('video');
       video.src = item.localPath ? `file://${item.localPath}` : (item.file_path ? `/api/content/file/${item.file_path}` : '');
-      video.muted = false;
+      video.muted = true; // start muted to guarantee autoplay, then unmute
       video.autoplay = true;
       video.loop = false;
+      video.playsInline = true;
+      // Unmute after playback starts (autoplay requires muted initially)
+      video.addEventListener('playing', () => { video.muted = false; }, { once: true });
       div.appendChild(video);
     } else if (item.type === 'url') {
       const wv = document.createElement('webview');
@@ -180,7 +183,18 @@
 
     if (item.type === 'video') {
       const vid = slide.querySelector('video');
-      vid.play().catch(() => {});
+      vid.onerror = () => {
+        // Codec not supported or file corrupt — skip after 2s
+        console.warn('Video error, skipping:', item.name);
+        clearTimeout(timer);
+        timer = setTimeout(onDone, 2000);
+      };
+      vid.play().catch(err => {
+        console.warn('Video play() failed:', err.message);
+        // Try muted as fallback
+        vid.muted = true;
+        vid.play().catch(() => { timer = setTimeout(onDone, 2000); });
+      });
       vid.onended = onDone;
       if (duration) timer = setTimeout(onDone, duration * 1000);
     } else {
