@@ -279,31 +279,33 @@
 
     playNext();
 
-    // Listen for sync updates
+    // Listen for sync updates from server
     window.lookit.player.onSync((data) => {
-      firstSyncDone = true;
       const wasPlaylistId = playlist?.playlist_id;
+      const wasFirstSync = firstSyncDone;
+      firstSyncDone = true;
       playlist = data.playlist;
       override = data.override;
 
+      const playlistChanged = playlist?.playlist_id !== wasPlaylistId;
+
       if (isOverrideActive()) {
+        // Override became active — interrupt immediately
         clearTimeout(timer);
         skipStreak = 0;
         playNext();
-      } else if (!wasPlaylistId && playlist?.items?.length > 0) {
-        // First time getting a playlist
-        skipStreak = 0;
-        currentIdx = 0;
-        playNext();
-      } else if (playlist?.playlist_id !== wasPlaylistId) {
+      } else if (playlistChanged || !wasFirstSync) {
+        // Different playlist or first ever sync — restart from beginning
         skipStreak = 0;
         currentIdx = 0;
         playNext();
       } else if (!activeSlide) {
-        // Was on loading screen, now has content
+        // Was stuck on loading screen — try again now that files may be ready
         skipStreak = 0;
         playNext();
       }
+      // Same playlist, already playing — downloaded flags updated silently,
+      // newly available files picked up on next slide transition
     });
 
     window.lookit.player.onRestart(() => {

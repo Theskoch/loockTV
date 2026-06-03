@@ -63,6 +63,7 @@ if (!fs.existsSync(CACHE_DIR)) fs.mkdirSync(CACHE_DIR, { recursive: true });
 app.whenReady().then(async () => {
   initLogger();
   store = await getStore();
+  loadCachedPlaylist(); // load from disk before window opens
   createWindow();
 });
 
@@ -223,6 +224,7 @@ async function syncPlaylist() {
     } : null;
 
     cleanCache(items);
+    saveCachedPlaylist(); // persist to disk for next startup
 
     if (data.playlist_id !== prevPlaylistId) {
       log('INFO', `Playlist changed → ${data.playlist_id}`);
@@ -232,8 +234,40 @@ async function syncPlaylist() {
     mainWindow?.webContents.send('playlist:sync', { playlist: currentPlaylist, override: overrideData });
   } catch (e) {
     log('WARN', 'Sync failed (offline?)', e.message);
-    // Offline — keep playing cached playlist, notify renderer to keep going
+    // Offline — keep playing cached playlist
     mainWindow?.webContents.send('playlist:sync', { playlist: currentPlaylist, override: overrideData });
+  }
+}
+
+function loadCachedPlaylist() {
+  try {
+    const saved = store.get('lastPlaylist');
+    if (!saved?.playlist) return;
+
+    // Re-verify which files are actually on disk (might have been cleaned)
+    const items = (saved.playlist.items || []).map(item => ({
+      ...item,
+      downloaded: item.localPath ? fs.existsSync(item.localPath) : true,
+    }));
+    currentPlaylist = { ...saved.playlist, items };
+
+    overrideData = saved.override ? {
+      ...saved.override,
+      downloaded: saved.override.localPath ? fs.existsSync(saved.override.localPath) : true,
+    } : null;
+
+    const ready = items.filter(i => i.downloaded).length;
+    log('INFO', `Loaded cached playlist from disk: ${ready}/${items.length} files ready`);
+  } catch (e) {
+    log('WARN', 'Failed to load cached playlist', e.message);
+  }
+}
+
+function saveCachedPlaylist() {
+  try {
+    store.set('lastPlaylist', { playlist: currentPlaylist, override: overrideData });
+  } catch (e) {
+    log('WARN', 'Failed to save playlist to disk', e.message);
   }
 }
 
