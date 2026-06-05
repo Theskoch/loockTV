@@ -25,7 +25,7 @@ router.get('/me', adminAuth, (req, res) => {
 
 router.get('/latest-version', adminAuth, (req, res) => {
   try {
-    const filePath = path.resolve(__dirname, '../../../client/latest-version.txt');
+    const filePath = path.resolve(__dirname, '../../latest-version.txt');
     const version = fs.readFileSync(filePath, 'utf8').trim();
     res.json({ version: version || null });
   } catch (e) {

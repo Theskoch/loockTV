@@ -117,9 +117,9 @@ docker compose up -d --build --no-deps server
 
 ## Выпуск новой версии клиента
 ```bash
-# 1. Обновить client/latest-version.txt (сервер читает этот файл — интернет из Docker недоступен)
-echo "1.X.X" > client/latest-version.txt
-git add client/latest-version.txt
+# 1. Обновить server/latest-version.txt (сервер читает этот файл — интернет из Docker недоступен)
+echo "1.X.X" > server/latest-version.txt
+git add server/latest-version.txt
 git commit -m "chore: bump latest-version to 1.X.X"
 git push origin main
 

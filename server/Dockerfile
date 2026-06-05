@@ -6,6 +6,7 @@ COPY package.json ./
 RUN npm install --production
 
 COPY src ./src
+COPY latest-version.txt ./
 
 EXPOSE 3000
 
