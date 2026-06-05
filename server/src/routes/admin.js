@@ -1,5 +1,7 @@
 const router = require('express').Router();
 const bcrypt = require('bcryptjs');
+const fs = require('fs');
+const path = require('path');
 const { pool } = require('../db');
 const { adminAuth, signAdminToken } = require('../middleware/auth');
 
@@ -21,21 +23,14 @@ router.get('/me', adminAuth, (req, res) => {
   res.json({ ok: true });
 });
 
-router.get('/latest-version', adminAuth, async (req, res) => {
+router.get('/latest-version', adminAuth, (req, res) => {
   try {
-    const headers = { 'User-Agent': 'LoockIT-Server/1.0' };
-    if (process.env.GITHUB_TOKEN) headers['Authorization'] = `Bearer ${process.env.GITHUB_TOKEN}`;
-    const r = await fetch('https://api.github.com/repos/Theskoch/loockTV/releases/latest', { headers });
-    if (!r.ok) {
-      const text = await r.text();
-      console.error(`[latest-version] GitHub API error ${r.status}: ${text}`);
-      return res.json({ version: null, error: `GitHub ${r.status}` });
-    }
-    const data = await r.json();
-    res.json({ version: data.tag_name?.replace(/^v/, '') || null });
+    const filePath = path.resolve(__dirname, '../../../client/latest-version.txt');
+    const version = fs.readFileSync(filePath, 'utf8').trim();
+    res.json({ version: version || null });
   } catch (e) {
-    console.error('[latest-version] fetch error:', e.message);
-    res.json({ version: null, error: e.message });
+    console.error('[latest-version] read error:', e.message);
+    res.json({ version: null });
   }
 });
 

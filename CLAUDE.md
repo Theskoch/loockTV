@@ -117,9 +117,17 @@ docker compose up -d --build --no-deps server
 
 ## Выпуск новой версии клиента
 ```bash
+# 1. Обновить client/latest-version.txt (сервер читает этот файл — интернет из Docker недоступен)
+echo "1.X.X" > client/latest-version.txt
+git add client/latest-version.txt
+git commit -m "chore: bump latest-version to 1.X.X"
+git push origin main
+
+# 2. Создать тег — запускает GitHub Actions
 git tag v1.X.X && git push origin v1.X.X
 ```
 → GitHub Actions: ставит версию из тега в package.json → electron-builder собирает и публикует на GitHub с `latest.yml` → auto-updater на экранах может обновиться через кнопку в панели.
+→ Сервер читает версию из `client/latest-version.txt` (не из GitHub API — Docker не имеет выхода в интернет).
 
 Кнопка скачать на странице входа: `https://github.com/Theskoch/loockTV/releases/latest/download/LoockIT-Setup.exe`
 
