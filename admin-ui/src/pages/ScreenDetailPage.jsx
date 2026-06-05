@@ -208,6 +208,7 @@ export default function ScreenDetailPage() {
   const [updating, setUpdating] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [latestVersion, setLatestVersion] = useState(null)
+  const [checkingVersion, setCheckingVersion] = useState(false)
 
   const load = useCallback(async () => {
     const [s, p, c] = await Promise.all([api.screens.get(id), api.playlists.list(), api.content.list()])
@@ -239,6 +240,12 @@ export default function ScreenDetailPage() {
     setUpdating(true)
     await api.screens.sendUpdate(id).catch(() => {})
     setTimeout(() => setUpdating(false), 5000)
+  }
+
+  async function checkVersion() {
+    setCheckingVersion(true)
+    await api.getLatestVersion().then(d => setLatestVersion(d.version)).catch(() => {})
+    setCheckingVersion(false)
   }
 
   function compareVersions(a, b) {
@@ -310,6 +317,14 @@ export default function ScreenDetailPage() {
                   → v{latestVersion} доступно
                 </span>
               )}
+              <button
+                onClick={checkVersion}
+                disabled={checkingVersion}
+                title="Проверить наличие обновлений"
+                className="text-xs text-gray-500 hover:text-gray-300 disabled:opacity-40 transition-colors px-1"
+              >
+                {checkingVersion ? '...' : '↻'}
+              </button>
             </div>
           </div>
           <div className="text-sm text-gray-400">{uptimeText}</div>
