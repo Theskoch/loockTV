@@ -23,14 +23,19 @@ router.get('/me', adminAuth, (req, res) => {
 
 router.get('/latest-version', adminAuth, async (req, res) => {
   try {
-    const r = await fetch('https://api.github.com/repos/Theskoch/loockTV/releases/latest', {
-      headers: { 'User-Agent': 'LoockIT-Server/1.0' },
-    });
-    if (!r.ok) return res.json({ version: null });
+    const headers = { 'User-Agent': 'LoockIT-Server/1.0' };
+    if (process.env.GITHUB_TOKEN) headers['Authorization'] = `Bearer ${process.env.GITHUB_TOKEN}`;
+    const r = await fetch('https://api.github.com/repos/Theskoch/loockTV/releases/latest', { headers });
+    if (!r.ok) {
+      const text = await r.text();
+      console.error(`[latest-version] GitHub API error ${r.status}: ${text}`);
+      return res.json({ version: null, error: `GitHub ${r.status}` });
+    }
     const data = await r.json();
     res.json({ version: data.tag_name?.replace(/^v/, '') || null });
-  } catch {
-    res.json({ version: null });
+  } catch (e) {
+    console.error('[latest-version] fetch error:', e.message);
+    res.json({ version: null, error: e.message });
   }
 });
 
