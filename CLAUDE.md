@@ -22,7 +22,7 @@ LoockIT/
 │       ├── admin.js      # POST /login, GET /me, GET /latest-version
 │       ├── screens.js    # CRUD + /reboot + /update + /overrides + /regenerate-key
 │       ├── playlists.js  # CRUD + items
-│       ├── content.js    # upload (1GB) + url + file serve
+│       ├── content.js    # upload (10GB) + url + file serve
 │       └── client.js     # /playlist, /info (для Electron клиента)
 ├── admin-ui/src/
 │   ├── App.jsx           # роутер + Layout + ProtectedRoute
@@ -66,7 +66,7 @@ LoockIT/
 - `GET /api/screens/:id/overrides`
 - `POST /api/screens/:id/override` / `DELETE /api/screens/:id/override/:oid`
 - `GET/POST/PUT/DELETE /api/playlists` + `GET /api/playlists/:id` (с items)
-- `GET /api/content` / `POST /api/content/upload` (1GB) / `POST /api/content/url` / `DELETE /api/content/:id`
+- `GET /api/content` / `POST /api/content/upload` (10GB) / `POST /api/content/url` / `DELETE /api/content/:id`
 
 **Client (x-api-key header):**
 - `GET /api/client/info` — проверка ключа
@@ -146,6 +146,8 @@ git tag v1.X.X && git push origin v1.X.X
 - v1.1.1: лого LoockIT на заставке загрузки
 - v1.1.2: угловая панель всегда доступна, показывает статус подключения к серверу
 - v1.1.3: картинки растягиваются на весь экран (object-fit: cover)
+- v1.1.4: latest-version.txt перенесён в server/, версия читается из файла (Docker без интернета), CI публикует не-draft релизы
+- v1.1.5: лимит загрузки контента 10ГБ (было 1ГБ); прогресс-бар загрузки файла на сервер (XHR вместо fetch) + плашка "Контент загружен" строго после полной загрузки; fix: удаление override раньше времени теперь сразу прерывает его на экране (player.html onSync ловит переход "был активен → удалён/истёк")
 
 ## Переменные окружения (.env)
 | Переменная | По умолчанию | Описание |

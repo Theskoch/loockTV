@@ -56,11 +56,38 @@ export const api = {
 
   content: {
     list: () => request('GET', '/content'),
-    uploadFile: (file, name) => {
+    uploadFile: (file, name, onProgress) => {
       const form = new FormData();
       form.append('file', file);
       if (name) form.append('name', name);
-      return request('POST', '/content/upload', form, true);
+
+      return new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', `${BASE}/content/upload`);
+        const token = getToken();
+        if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+
+        xhr.upload.addEventListener('progress', (e) => {
+          if (e.lengthComputable && onProgress) {
+            onProgress(Math.round((e.loaded / e.total) * 100));
+          }
+        });
+
+        xhr.addEventListener('load', () => {
+          if (xhr.status === 401) {
+            localStorage.removeItem('token');
+            window.location.href = '/login';
+            return;
+          }
+          let data;
+          try { data = JSON.parse(xhr.responseText); } catch { data = {}; }
+          if (xhr.status >= 200 && xhr.status < 300) resolve(data);
+          else reject(new Error(data.error || 'Upload failed'));
+        });
+
+        xhr.addEventListener('error', () => reject(new Error('Network error')));
+        xhr.send(form);
+      });
     },
     addUrl: (name, url) => request('POST', '/content/url', { name, url }),
     delete: (id) => request('DELETE', `/content/${id}`),

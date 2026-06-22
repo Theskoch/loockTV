@@ -338,6 +338,7 @@
     window.lookit.player.onSync((data) => {
       const wasPlaylistId = playlist?.playlist_id;
       const wasFirstSync = firstSyncDone;
+      const wasOverrideActive = isOverrideActive(); // evaluate against old override before reassign
       firstSyncDone = true;
       playlist = data.playlist;
       override = data.override;
@@ -348,6 +349,12 @@
         // Override became active — interrupt immediately
         clearTimeout(timer);
         skipStreak = 0;
+        playNext();
+      } else if (wasOverrideActive) {
+        // Override was active and was removed/expired early — stop it now, resume playlist
+        clearTimeout(timer);
+        skipStreak = 0;
+        currentIdx = 0;
         playNext();
       } else if (playlistChanged || !wasFirstSync) {
         // Different playlist or first ever sync — restart from beginning

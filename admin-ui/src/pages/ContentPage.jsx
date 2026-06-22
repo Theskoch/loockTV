@@ -7,14 +7,17 @@ const TYPE_COLORS = { image: 'bg-blue-900/50 text-blue-300', video: 'bg-purple-9
 function formatBytes(b) {
   if (!b) return ''
   if (b < 1024 * 1024) return `${(b / 1024).toFixed(0)} KB`
-  return `${(b / 1024 / 1024).toFixed(1)} MB`
+  if (b < 1024 * 1024 * 1024) return `${(b / 1024 / 1024).toFixed(1)} MB`
+  return `${(b / 1024 / 1024 / 1024).toFixed(2)} ГБ`
 }
 
 export default function ContentPage() {
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
-  const [uploadProgress, setUploadProgress] = useState(null)
+  const [uploadName, setUploadName] = useState(null)
+  const [uploadPercent, setUploadPercent] = useState(0)
+  const [toast, setToast] = useState(null)
   const [urlName, setUrlName] = useState('')
   const [urlVal, setUrlVal] = useState('')
   const [tab, setTab] = useState('file')
@@ -30,16 +33,26 @@ export default function ContentPage() {
 
   useEffect(() => { load() }, [load])
 
+  function showToast(msg) {
+    setToast(msg)
+    setTimeout(() => setToast(null), 4000)
+  }
+
   async function uploadFile(file) {
     if (!file) return
     setUploading(true)
-    setUploadProgress(file.name)
+    setUploadName(file.name)
+    setUploadPercent(0)
     try {
-      await api.content.uploadFile(file, file.name)
-      load()
+      await api.content.uploadFile(file, file.name, (pct) => setUploadPercent(pct))
+      await load()
+      showToast(`Контент загружен: ${file.name}`)
+    } catch (err) {
+      showToast(`Ошибка загрузки: ${file.name}`)
     } finally {
       setUploading(false)
-      setUploadProgress(null)
+      setUploadName(null)
+      setUploadPercent(0)
     }
   }
 
@@ -101,6 +114,16 @@ export default function ContentPage() {
     >
       <h1 className="text-2xl font-bold mb-8">Контент</h1>
 
+      {/* Toast */}
+      {toast && (
+        <div className="fixed bottom-6 right-6 z-50 bg-green-600 text-white px-5 py-3 rounded-xl shadow-lg flex items-center gap-2">
+          <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <span className="text-sm font-medium">{toast}</span>
+        </div>
+      )}
+
       {/* Drop overlay */}
       {dropZoneActive && (
         <div className="fixed inset-0 z-50 bg-indigo-900/40 border-4 border-dashed border-indigo-500 flex items-center justify-center pointer-events-none">
@@ -109,7 +132,7 @@ export default function ContentPage() {
               <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
             </svg>
             <div className="text-2xl font-bold text-indigo-200">Отпусти файлы здесь</div>
-            <div className="text-sm text-indigo-400 mt-1">Изображения и видео до 1 ГБ</div>
+            <div className="text-sm text-indigo-400 mt-1">Изображения и видео до 10 ГБ</div>
           </div>
         </div>
       )}
@@ -133,13 +156,24 @@ export default function ContentPage() {
             <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
           </svg>
           {uploading ? (
-            <div className="text-sm text-indigo-400">Загружается: {uploadProgress}...</div>
+            <div className="max-w-md mx-auto">
+              <div className="text-sm text-indigo-400 mb-2 truncate">Загружается: {uploadName}</div>
+              <div className="h-2.5 bg-gray-800 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-indigo-500 transition-all duration-150"
+                  style={{ width: `${uploadPercent}%` }}
+                />
+              </div>
+              <div className="text-xs text-indigo-300 mt-1.5 font-medium">
+                {uploadPercent}%{uploadPercent === 100 ? ' — обработка на сервере...' : ''}
+              </div>
+            </div>
           ) : (
             <>
               <div className="text-sm font-medium text-gray-300 group-hover:text-white transition-colors">
                 Перетащи файлы сюда или нажми для выбора
               </div>
-              <div className="text-xs text-gray-600 mt-1">Изображения и видео до 1 ГБ</div>
+              <div className="text-xs text-gray-600 mt-1">Изображения и видео до 10 ГБ</div>
             </>
           )}
         </div>
