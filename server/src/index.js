@@ -14,6 +14,12 @@ const contentRoutes = require('./routes/content');
 const clientRoutes = require('./routes/client');
 const { screenAuth } = require('./middleware/screenAuth');
 
+// Safety net: a rejected promise in a route must not crash the whole server
+// (signage server must stay up; otherwise the admin web + all screens go down).
+process.on('unhandledRejection', (reason) => {
+  console.error('Unhandled promise rejection:', reason);
+});
+
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {

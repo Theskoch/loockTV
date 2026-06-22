@@ -13,18 +13,23 @@ router.get('/playlist', screenAuth, async (req, res) => {
   // On overlapping windows the one that STARTS LATER wins (ORDER BY start_time DESC).
   // Supports overnight windows (start_time > end_time, e.g. 22:00–02:00).
   let activePlaylistId = screen.current_playlist_id;
-  const sched = await pool.query(`
-    SELECT playlist_id
-    FROM screen_playlist_schedules
-    WHERE screen_id = $1 AND (
-      (start_time <= end_time AND (NOW() AT TIME ZONE $2)::time BETWEEN start_time AND end_time)
-      OR
-      (start_time > end_time AND ((NOW() AT TIME ZONE $2)::time >= start_time OR (NOW() AT TIME ZONE $2)::time <= end_time))
-    )
-    ORDER BY start_time DESC
-    LIMIT 1
-  `, [screen.id, TZ]);
-  if (sched.rows[0]) activePlaylistId = sched.rows[0].playlist_id;
+  try {
+    const sched = await pool.query(`
+      SELECT playlist_id
+      FROM screen_playlist_schedules
+      WHERE screen_id = $1 AND (
+        (start_time <= end_time AND (NOW() AT TIME ZONE $2::text)::time BETWEEN start_time AND end_time)
+        OR
+        (start_time > end_time AND ((NOW() AT TIME ZONE $2::text)::time >= start_time OR (NOW() AT TIME ZONE $2::text)::time <= end_time))
+      )
+      ORDER BY start_time DESC
+      LIMIT 1
+    `, [screen.id, TZ]);
+    if (sched.rows[0]) activePlaylistId = sched.rows[0].playlist_id;
+  } catch (e) {
+    // Never let schedule resolution take down the request — fall back to default playlist
+    console.error('Schedule resolution failed, using default playlist:', e.message);
+  }
 
   if (!activePlaylistId) {
     return res.json({ playlist: null, override: null });
