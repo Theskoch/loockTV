@@ -38,13 +38,32 @@ export default function ContentPage() {
     setTimeout(() => setToast(null), 4000)
   }
 
+  // Read video duration locally (no upload) via a hidden <video> element
+  function detectVideoDuration(file) {
+    return new Promise((resolve) => {
+      if (!file.type.startsWith('video/')) return resolve(null)
+      const video = document.createElement('video')
+      video.preload = 'metadata'
+      const url = URL.createObjectURL(file)
+      const cleanup = () => URL.revokeObjectURL(url)
+      video.onloadedmetadata = () => {
+        cleanup()
+        const d = video.duration
+        resolve(isFinite(d) && d > 0 ? Math.ceil(d) : null)
+      }
+      video.onerror = () => { cleanup(); resolve(null) }
+      video.src = url
+    })
+  }
+
   async function uploadFile(file) {
     if (!file) return
     setUploading(true)
     setUploadName(file.name)
     setUploadPercent(0)
     try {
-      await api.content.uploadFile(file, file.name, (pct) => setUploadPercent(pct))
+      const duration = await detectVideoDuration(file)
+      await api.content.uploadFile(file, file.name, (pct) => setUploadPercent(pct), duration)
       await load()
       showToast(`Контент загружен: ${file.name}`)
     } catch (err) {

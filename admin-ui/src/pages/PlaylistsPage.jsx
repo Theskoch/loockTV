@@ -8,6 +8,19 @@ const TYPE_ICONS = {
   url: '🌐',
 }
 
+// Human-readable hint for long durations: 28800 → "8 ч", 150 → "2 мин 30 с"
+function formatHMS(sec) {
+  if (!sec || sec < 60) return ''
+  const h = Math.floor(sec / 3600)
+  const m = Math.floor((sec % 3600) / 60)
+  const s = sec % 60
+  const parts = []
+  if (h) parts.push(`${h} ч`)
+  if (m) parts.push(`${m} мин`)
+  if (s) parts.push(`${s} с`)
+  return parts.join(' ')
+}
+
 // Drop zone between playlist items
 function DropLine({ onDrop, active }) {
   return (
@@ -30,6 +43,16 @@ function PlaylistEditor({ playlist, content, onSave, onClose }) {
   const [dropLineIdx, setDropLineIdx] = useState(null) // index of drop line to highlight
 
   const filteredContent = content.filter(c => c.name.toLowerCase().includes(search.toLowerCase()))
+
+  // Default show-time for a content item: full length for videos (auto-detected), else 10s
+  function defaultDuration(c) {
+    if (c.type === 'video' && c.duration_seconds > 0) return c.duration_seconds
+    return 10
+  }
+  function makeItem(c) {
+    const dur = defaultDuration(c)
+    return { content_id: c.id, duration_seconds: dur, _dur: String(dur), _name: c.name, _type: c.type, _key: Math.random() }
+  }
 
   // ---- Drag from content library ----
   function onContentDragStart(e, c) {
@@ -54,8 +77,7 @@ function PlaylistEditor({ playlist, content, onSave, onClose }) {
     setDragSrc(null)
 
     if (dragSrc.from === 'content') {
-      const c = dragSrc.item
-      const newItem = { content_id: c.id, duration_seconds: 10, _name: c.name, _type: c.type, _key: Math.random() }
+      const newItem = makeItem(dragSrc.item)
       setItems(prev => {
         const arr = [...prev]
         arr.splice(lineIdx, 0, newItem)
@@ -78,8 +100,7 @@ function PlaylistEditor({ playlist, content, onSave, onClose }) {
     e.preventDefault()
     if (!dragSrc) return
     if (dragSrc.from === 'content') {
-      const c = dragSrc.item
-      setItems(prev => [...prev, { content_id: c.id, duration_seconds: 10, _name: c.name, _type: c.type, _key: Math.random() }])
+      setItems(prev => [...prev, makeItem(dragSrc.item)])
     }
     setDragSrc(null)
     setDropLineIdx(null)
@@ -100,7 +121,7 @@ function PlaylistEditor({ playlist, content, onSave, onClose }) {
   }
 
   function addFromContent(c) {
-    setItems(prev => [...prev, { content_id: c.id, duration_seconds: 10, _dur: '10', _name: c.name, _type: c.type, _key: Math.random() }])
+    setItems(prev => [...prev, makeItem(c)])
   }
 
   // While typing: only update display string, allow empty
@@ -114,7 +135,7 @@ function PlaylistEditor({ playlist, content, onSave, onClose }) {
     setItems(prev => prev.map((x, i) => {
       if (i !== idx) return x
       const n = parseInt(x._dur)
-      const seconds = (!n || n < 1) ? 10 : Math.min(n, 3600)
+      const seconds = (!n || n < 1) ? 10 : n
       return { ...x, duration_seconds: seconds, _dur: String(seconds) }
     }))
   }
@@ -200,6 +221,9 @@ function PlaylistEditor({ playlist, content, onSave, onClose }) {
                         <span className="flex-1 text-sm text-white truncate">{item._name}</span>
                         {/* Duration — always visible */}
                         <div className="flex items-center gap-1 shrink-0">
+                          {parseInt(item._dur) >= 60 && (
+                            <span className="text-[10px] text-gray-500 whitespace-nowrap">{formatHMS(parseInt(item._dur))}</span>
+                          )}
                           <input
                             type="text"
                             inputMode="numeric"
@@ -209,7 +233,7 @@ function PlaylistEditor({ playlist, content, onSave, onClose }) {
                             onClick={e => e.stopPropagation()}
                             onDragStart={e => e.stopPropagation()}
                             placeholder="10"
-                            className="w-12 bg-gray-800 rounded px-2 py-1 text-xs text-white text-center outline-none focus:ring-1 focus:ring-indigo-500 cursor-text"
+                            className="w-16 bg-gray-800 rounded px-2 py-1 text-xs text-white text-center outline-none focus:ring-1 focus:ring-indigo-500 cursor-text"
                           />
                           <span className="text-xs text-gray-500">с</span>
                         </div>

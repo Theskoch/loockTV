@@ -49,7 +49,7 @@ LoockIT/
 ## Схема БД
 - `admin` — логин/password_hash
 - `screens` — id, name, api_key, last_seen, current_playlist_id, **app_version**
-- `content` — id, name, type(image|video|url), file_path, url, mime_type, size_bytes
+- `content` — id, name, type(image|video|url), file_path, url, mime_type, size_bytes, **duration_seconds** (длина видео, определяется в браузере при загрузке)
 - `playlists` — id, name
 - `playlist_items` — playlist_id, content_id, duration_seconds, sort_order
 - `screen_overrides` — screen_id, content_id, start_at, end_at
@@ -148,6 +148,7 @@ git tag v1.X.X && git push origin v1.X.X
 - v1.1.3: картинки растягиваются на весь экран (object-fit: cover)
 - v1.1.4: latest-version.txt перенесён в server/, версия читается из файла (Docker без интернета), CI публикует не-draft релизы
 - v1.1.5: лимит загрузки контента 10ГБ (было 1ГБ); прогресс-бар загрузки файла на сервер (XHR вместо fetch) + плашка "Контент загружен" строго после полной загрузки; fix: удаление override раньше времени теперь сразу прерывает его на экране (player.html onSync ловит переход "был активен → удалён/истёк")
+- (серверный апдейт, без нового .exe): длительность видео определяется в браузере при загрузке (`<video>` из локального File) и пишется в `content.duration_seconds`; при добавлении видео в плейлист время показа авто-подставляется = длине ролика (можно укоротить вручную); снят лимит 3600с на время показа для любого контента (поле показывает подсказку "8 ч" для длинных значений)
 
 ## Переменные окружения (.env)
 | Переменная | По умолчанию | Описание |

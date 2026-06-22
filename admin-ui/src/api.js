@@ -56,10 +56,11 @@ export const api = {
 
   content: {
     list: () => request('GET', '/content'),
-    uploadFile: (file, name, onProgress) => {
+    uploadFile: (file, name, onProgress, durationSeconds) => {
       const form = new FormData();
       form.append('file', file);
       if (name) form.append('name', name);
+      if (durationSeconds) form.append('duration_seconds', String(durationSeconds));
 
       return new Promise((resolve, reject) => {
         const xhr = new XMLHttpRequest();

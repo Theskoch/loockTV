@@ -51,6 +51,9 @@ CREATE TABLE IF NOT EXISTS screen_overrides (
 -- Safe migration: add app_version column if not exists
 ALTER TABLE screens ADD COLUMN IF NOT EXISTS app_version VARCHAR(32);
 
+-- Safe migration: store detected media duration (seconds) for video content
+ALTER TABLE content ADD COLUMN IF NOT EXISTS duration_seconds INTEGER;
+
 CREATE INDEX IF NOT EXISTS idx_screens_api_key ON screens(api_key);
 CREATE INDEX IF NOT EXISTS idx_playlist_items_playlist ON playlist_items(playlist_id);
 CREATE INDEX IF NOT EXISTS idx_overrides_screen ON screen_overrides(screen_id);

@@ -33,9 +33,12 @@ router.post('/upload', adminAuth, upload.single('file'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file or invalid type' });
 
   const type = req.file.mimetype.startsWith('video/') ? 'video' : 'image';
+  // Duration detected client-side (browser <video>), only meaningful for video
+  const dur = parseInt(req.body.duration_seconds);
+  const duration = (type === 'video' && dur > 0) ? dur : null;
   const { rows } = await pool.query(
-    'INSERT INTO content (name, type, file_path, mime_type, size_bytes) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-    [req.body.name || req.file.originalname, type, req.file.filename, req.file.mimetype, req.file.size]
+    'INSERT INTO content (name, type, file_path, mime_type, size_bytes, duration_seconds) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
+    [req.body.name || req.file.originalname, type, req.file.filename, req.file.mimetype, req.file.size, duration]
   );
   res.status(201).json(rows[0]);
 });
