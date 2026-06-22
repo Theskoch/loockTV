@@ -54,6 +54,18 @@ ALTER TABLE screens ADD COLUMN IF NOT EXISTS app_version VARCHAR(32);
 -- Safe migration: store detected media duration (seconds) for video content
 ALTER TABLE content ADD COLUMN IF NOT EXISTS duration_seconds INTEGER;
 
+-- Per-screen playlist schedule: play a playlist during a daily time window.
+-- Default playlist (screens.current_playlist_id) plays outside all windows.
+CREATE TABLE IF NOT EXISTS screen_playlist_schedules (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  screen_id UUID NOT NULL REFERENCES screens(id) ON DELETE CASCADE,
+  playlist_id UUID NOT NULL REFERENCES playlists(id) ON DELETE CASCADE,
+  start_time TIME NOT NULL,
+  end_time TIME NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_pl_schedules_screen ON screen_playlist_schedules(screen_id);
+
 CREATE INDEX IF NOT EXISTS idx_screens_api_key ON screens(api_key);
 CREATE INDEX IF NOT EXISTS idx_playlist_items_playlist ON playlist_items(playlist_id);
 CREATE INDEX IF NOT EXISTS idx_overrides_screen ON screen_overrides(screen_id);

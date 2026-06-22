@@ -42,6 +42,40 @@ router.get('/:id/overrides', adminAuth, async (req, res) => {
   res.json(rows);
 });
 
+// ── Playlist schedules (time-based playlist switching) ──────────────
+router.get('/:id/schedules', adminAuth, async (req, res) => {
+  const { rows } = await pool.query(`
+    SELECT sps.id, sps.playlist_id, sps.start_time, sps.end_time, p.name AS playlist_name
+    FROM screen_playlist_schedules sps
+    JOIN playlists p ON p.id = sps.playlist_id
+    WHERE sps.screen_id = $1
+    ORDER BY sps.start_time ASC
+  `, [req.params.id]);
+  res.json(rows);
+});
+
+router.post('/:id/schedule', adminAuth, async (req, res) => {
+  const { playlist_id, start_time, end_time } = req.body;
+  if (!playlist_id || !start_time || !end_time) return res.status(400).json({ error: 'Missing fields' });
+
+  const { rows } = await pool.query(
+    'INSERT INTO screen_playlist_schedules (screen_id, playlist_id, start_time, end_time) VALUES ($1, $2, $3, $4) RETURNING *',
+    [req.params.id, playlist_id, start_time, end_time]
+  );
+
+  const io = req.app.get('io');
+  io.to(`screen:${req.params.id}`).emit('playlist:update');
+
+  res.status(201).json(rows[0]);
+});
+
+router.delete('/:id/schedule/:sid', adminAuth, async (req, res) => {
+  await pool.query('DELETE FROM screen_playlist_schedules WHERE id = $1 AND screen_id = $2', [req.params.sid, req.params.id]);
+  const io = req.app.get('io');
+  io.to(`screen:${req.params.id}`).emit('playlist:update');
+  res.json({ ok: true });
+});
+
 router.post('/:id/reboot', adminAuth, async (req, res) => {
   const io = req.app.get('io');
   io.to(`screen:${req.params.id}`).emit('screen:reboot');

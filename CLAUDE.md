@@ -53,6 +53,7 @@ LoockIT/
 - `playlists` — id, name
 - `playlist_items` — playlist_id, content_id, duration_seconds, sort_order
 - `screen_overrides` — screen_id, content_id, start_at, end_at
+- `screen_playlist_schedules` — screen_id, playlist_id, start_time, end_time (TIME, окна по времени суток; вне всех окон играет current_playlist_id; при пересечении побеждает окно с поздним start_time)
 
 ## API
 **Admin (Bearer JWT):**
@@ -65,12 +66,14 @@ LoockIT/
 - `POST /api/screens/:id/update` → socket emit `screen:update`
 - `GET /api/screens/:id/overrides`
 - `POST /api/screens/:id/override` / `DELETE /api/screens/:id/override/:oid`
+- `GET /api/screens/:id/schedules` — расписание плейлистов экрана
+- `POST /api/screens/:id/schedule` `{ playlist_id, start_time, end_time }` / `DELETE /api/screens/:id/schedule/:sid`
 - `GET/POST/PUT/DELETE /api/playlists` + `GET /api/playlists/:id` (с items)
 - `GET /api/content` / `POST /api/content/upload` (10GB) / `POST /api/content/url` / `DELETE /api/content/:id`
 
 **Client (x-api-key header):**
 - `GET /api/client/info` — проверка ключа
-- `GET /api/client/playlist` — плейлист + активный override
+- `GET /api/client/playlist` — плейлист + активный override (сервер выбирает плейлист по расписанию `screen_playlist_schedules` для текущего времени в `APP_TIMEZONE`, иначе current_playlist_id; экран ресинкается раз в 60с, поэтому смена по расписанию подхватывается в течение минуты)
 - `GET /api/content/file/:filename` — скачать файл
 
 **WebSocket (Socket.io):**
@@ -149,6 +152,7 @@ git tag v1.X.X && git push origin v1.X.X
 - v1.1.4: latest-version.txt перенесён в server/, версия читается из файла (Docker без интернета), CI публикует не-draft релизы
 - v1.1.5: лимит загрузки контента 10ГБ (было 1ГБ); прогресс-бар загрузки файла на сервер (XHR вместо fetch) + плашка "Контент загружен" строго после полной загрузки; fix: удаление override раньше времени теперь сразу прерывает его на экране (player.html onSync ловит переход "был активен → удалён/истёк")
 - (серверный апдейт, без нового .exe): длительность видео определяется в браузере при загрузке (`<video>` из локального File) и пишется в `content.duration_seconds`; при добавлении видео в плейлист время показа авто-подставляется = длине ролика (можно укоротить вручную); снят лимит 3600с на время показа для любого контента (поле показывает подсказку "8 ч" для длинных значений)
+- (серверный апдейт, без нового .exe): расписание плейлистов по времени суток — на странице экрана можно задать несколько окон (плейлист + С/До), вне окон играет плейлист по умолчанию. Резолв активного плейлиста на сервере в `/api/client/playlist` (таймзона `APP_TIMEZONE`), при пересечении окон побеждает позднее начало, поддержаны окна через полночь. Таблица `screen_playlist_schedules`, эндпоинты `/screens/:id/schedules|schedule`
 
 ## Переменные окружения (.env)
 | Переменная | По умолчанию | Описание |
@@ -158,6 +162,7 @@ git tag v1.X.X && git push origin v1.X.X
 | ADMIN_USERNAME | admin | Логин |
 | ADMIN_PASSWORD | changeme123 | Пароль |
 | SERVER_PORT | 3000 | Порт сервера |
+| APP_TIMEZONE | Europe/Moscow | Таймзона (IANA) для расписания плейлистов |
 
 ## Известные ограничения / TODO
 - MOV с ProRes кодеком не воспроизведётся — нужно MP4 (H.264)

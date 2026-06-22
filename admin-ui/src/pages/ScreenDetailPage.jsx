@@ -197,6 +197,100 @@ function OverrideSection({ screenId, content, onChanged }) {
   )
 }
 
+function ScheduleSection({ screenId, playlists }) {
+  const [schedules, setSchedules] = useState([])
+  const [playlistId, setPlaylistId] = useState('')
+  const [startTime, setStartTime] = useState('09:00')
+  const [endTime, setEndTime] = useState('18:00')
+  const [saving, setSaving] = useState(false)
+
+  const loadSchedules = useCallback(async () => {
+    const data = await api.screens.getSchedules(screenId)
+    setSchedules(data)
+  }, [screenId])
+
+  useEffect(() => { loadSchedules() }, [loadSchedules])
+
+  async function add() {
+    if (!playlistId || !startTime || !endTime) return
+    setSaving(true)
+    try {
+      await api.screens.addSchedule(screenId, { playlist_id: playlistId, start_time: startTime, end_time: endTime })
+      setPlaylistId('')
+      await loadSchedules()
+    } finally { setSaving(false) }
+  }
+
+  async function remove(sid) {
+    await api.screens.deleteSchedule(screenId, sid)
+    loadSchedules()
+  }
+
+  // Is this window active right now (local browser time, HH:MM)?
+  function isActiveNow(s) {
+    const now = new Date()
+    const cur = now.getHours() * 60 + now.getMinutes()
+    const [sh, sm] = s.start_time.split(':').map(Number)
+    const [eh, em] = s.end_time.split(':').map(Number)
+    const start = sh * 60 + sm, end = eh * 60 + em
+    return start <= end ? (cur >= start && cur <= end) : (cur >= start || cur <= end)
+  }
+
+  return (
+    <div className="bg-gray-900 rounded-xl p-5">
+      <h3 className="font-medium text-white mb-1">Расписание плейлистов</h3>
+      <p className="text-xs text-gray-500 mb-4">
+        Плейлист крутится в заданное время. Вне всех окон играет плейлист по умолчанию.
+        При пересечении побеждает окно, которое начинается позже.
+      </p>
+
+      {schedules.length > 0 && (
+        <div className="space-y-2 mb-4">
+          {schedules.map(s => (
+            <div key={s.id} className="flex items-center gap-3 bg-gray-800 rounded-lg px-3 py-2">
+              {isActiveNow(s) && <span className="w-1.5 h-1.5 rounded-full bg-green-400 shrink-0" title="Сейчас активно" />}
+              <span className="text-xs font-mono text-indigo-300 shrink-0">{s.start_time.slice(0, 5)}–{s.end_time.slice(0, 5)}</span>
+              <span className="flex-1 text-sm text-white truncate">{s.playlist_name}</span>
+              <button onClick={() => remove(s.id)} className="text-xs text-red-500 hover:text-red-400 shrink-0 transition-colors">Удалить</button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="flex gap-2 items-end flex-wrap">
+        <div className="flex-1 min-w-[140px]">
+          <label className="block text-xs text-gray-500 mb-1">Плейлист</label>
+          <select
+            className="w-full bg-gray-800 text-white rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+            value={playlistId}
+            onChange={e => setPlaylistId(e.target.value)}
+          >
+            <option value="">— выбрать —</option>
+            {playlists.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">С</label>
+          <input type="time" value={startTime} onChange={e => setStartTime(e.target.value)}
+            className="bg-gray-800 text-white text-sm rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500" />
+        </div>
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">До</label>
+          <input type="time" value={endTime} onChange={e => setEndTime(e.target.value)}
+            className="bg-gray-800 text-white text-sm rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500" />
+        </div>
+        <button
+          onClick={add}
+          disabled={!playlistId || saving}
+          className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white text-sm rounded-lg px-4 py-2 font-medium transition-colors"
+        >
+          {saving ? '...' : 'Добавить'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export default function ScreenDetailPage() {
   const { id } = useParams()
   const nav = useNavigate()
@@ -348,9 +442,10 @@ export default function ScreenDetailPage() {
           </div>
         </div>
 
-        {/* Playlist */}
+        {/* Default playlist */}
         <div className="bg-gray-900 rounded-xl p-5">
-          <h3 className="font-medium text-white mb-3">Плейлист</h3>
+          <h3 className="font-medium text-white mb-1">Плейлист по умолчанию</h3>
+          <p className="text-xs text-gray-500 mb-3">Играет, когда не активно ни одно окно расписания.</p>
           <select
             className="w-full bg-gray-800 text-white rounded-lg px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
             value={screen.current_playlist_id || ''}
@@ -360,6 +455,9 @@ export default function ScreenDetailPage() {
             {playlists.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
         </div>
+
+        {/* Playlist schedule */}
+        <ScheduleSection screenId={id} playlists={playlists} />
 
         {/* Override */}
         <OverrideSection screenId={id} content={content} onChanged={load} />

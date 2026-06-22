@@ -44,6 +44,9 @@ export const api = {
     getOverrides: (id) => request('GET', `/screens/${id}/overrides`),
     setOverride: (id, data) => request('POST', `/screens/${id}/override`, data),
     deleteOverride: (id, oid) => request('DELETE', `/screens/${id}/override/${oid}`),
+    getSchedules: (id) => request('GET', `/screens/${id}/schedules`),
+    addSchedule: (id, data) => request('POST', `/screens/${id}/schedule`, data),
+    deleteSchedule: (id, sid) => request('DELETE', `/screens/${id}/schedule/${sid}`),
   },
 
   playlists: {
