@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, screen: electronScreen, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, screen: electronScreen, shell, desktopCapturer } = require('electron');
 const { autoUpdater } = require('electron-updater');
 
 // Allow video autoplay without user gesture (needed for signage)
@@ -237,6 +237,81 @@ function downloadFile(serverUrl, filename, apiKey) {
     req.end();
   });
 }
+// ─── Screen capture (preview thumbnail + live view) ───────────────────────
+const THUMB = { maxWidth: 480, quality: 60 };   // periodic preview in screen list
+const LIVE = { maxWidth: 1280, quality: 70 };    // on-demand live view
+const IDLE_INTERVAL = 5 * 60 * 1000;             // preview every 5 min
+const LIVE_INTERVAL = 4000;                       // live frame every 4 s
+const LIVE_SELF_EXPIRY = 90000;                   // stop live if no fresh start within 90 s
+
+let idleTimer = null;
+let liveTimer = null;
+let liveExpiry = 0;
+let capturing = false;
+
+// Capture the actual physical display (not the app window) and upload as JPEG
+async function captureAndUpload({ maxWidth, quality }) {
+  if (capturing || !mainWindow) return;
+  const serverUrl = store.get('serverUrl');
+  const apiKey = store.get('apiKey');
+  if (!serverUrl || !apiKey) return;
+  capturing = true;
+  try {
+    const disp = electronScreen.getDisplayMatching(mainWindow.getBounds());
+    const aspect = disp.size.height / disp.size.width;
+    const thumbnailSize = { width: maxWidth, height: Math.round(maxWidth * aspect) };
+    const sources = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize });
+    const src = sources.find(s => s.display_id && String(disp.id) === s.display_id) || sources[0];
+    if (!src || src.thumbnail.isEmpty()) return;
+    const jpeg = src.thumbnail.toJPEG(quality);
+    await postBuffer(`${serverUrl}/api/client/screenshot`, apiKey, jpeg);
+  } catch (e) {
+    log('WARN', 'Screenshot capture/upload failed', e.message);
+  } finally {
+    capturing = false;
+  }
+}
+
+function postBuffer(url, apiKey, buffer) {
+  return new Promise((resolve, reject) => {
+    const parsed = new URL(url);
+    const lib = parsed.protocol === 'https:' ? https : http;
+    const req = lib.request(url, {
+      method: 'POST',
+      headers: { 'x-api-key': apiKey, 'Content-Type': 'image/jpeg', 'Content-Length': buffer.length },
+    }, (res) => {
+      res.on('data', () => {});
+      res.on('end', () => (res.statusCode >= 400 ? reject(new Error(`HTTP ${res.statusCode}`)) : resolve()));
+    });
+    req.on('error', reject);
+    req.write(buffer);
+    req.end();
+  });
+}
+
+function startIdleCapture() {
+  if (idleTimer) return;
+  setTimeout(() => { if (!liveTimer) captureAndUpload(THUMB); }, 15000); // first frame after render
+  idleTimer = setInterval(() => { if (!liveTimer) captureAndUpload(THUMB); }, IDLE_INTERVAL);
+}
+
+function startLive() {
+  liveExpiry = Date.now() + LIVE_SELF_EXPIRY; // refresh expiry on every (re)start
+  if (liveTimer) return;
+  log('INFO', 'Live capture started');
+  captureAndUpload(LIVE);
+  liveTimer = setInterval(() => {
+    if (Date.now() > liveExpiry) return stopLive();
+    captureAndUpload(LIVE);
+  }, LIVE_INTERVAL);
+}
+
+function stopLive() {
+  if (!liveTimer) return;
+  clearInterval(liveTimer);
+  liveTimer = null;
+  log('INFO', 'Live capture stopped');
+}
 // ─────────────────────────────────────────────────────────────────────────
 
 async function syncPlaylist() {
@@ -376,9 +451,15 @@ function connectToServer(serverUrl, apiKey) {
     checkForUpdate();
   });
 
+  socket.on('screen:live:start', () => { log('INFO', 'Live view requested'); startLive(); });
+  socket.on('screen:live:stop', () => { log('INFO', 'Live view ended'); stopLive(); });
+
   // First sync + periodic re-sync
   syncPlaylist();
   setInterval(() => syncPlaylist(), 60000);
+
+  // Periodic screen preview (every 5 min)
+  startIdleCapture();
 }
 
 function restartPlayer() {

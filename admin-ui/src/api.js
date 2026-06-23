@@ -47,6 +47,9 @@ export const api = {
     getSchedules: (id) => request('GET', `/screens/${id}/schedules`),
     addSchedule: (id, data) => request('POST', `/screens/${id}/schedule`, data),
     deleteSchedule: (id, sid) => request('DELETE', `/screens/${id}/schedule/${sid}`),
+    // Screenshot URL for <img> — token in query (header can't be set on img), cache-bust with t
+    screenshotUrl: (id, t) => `${BASE}/screens/${id}/screenshot?token=${getToken()}&t=${t || ''}`,
+    setLive: (id, active) => request('POST', `/screens/${id}/live`, { active }),
   },
 
   playlists: {

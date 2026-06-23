@@ -81,6 +81,13 @@ export default function ScreensPage() {
               onClick={() => nav(`/screens/${screen.id}`)}
               className={`bg-gray-900 hover:bg-gray-800 rounded-xl px-5 py-4 flex items-center gap-4 cursor-pointer transition-colors ${!screen.online ? 'opacity-60' : ''}`}
             >
+              <div className="w-28 aspect-video rounded-lg overflow-hidden bg-black shrink-0 flex items-center justify-center">
+                {screen.last_screenshot_at ? (
+                  <img src={api.screens.screenshotUrl(screen.id, screen.last_screenshot_at)} className="w-full h-full object-cover" alt="" />
+                ) : (
+                  <span className="text-[10px] text-gray-600 px-1 text-center">нет превью</span>
+                )}
+              </div>
               <StatusDot online={screen.online} />
               <div className="flex-1 min-w-0">
                 <div className="font-semibold text-white">{screen.name}</div>

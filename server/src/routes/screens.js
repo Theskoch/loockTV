@@ -1,8 +1,16 @@
 const router = require('express').Router();
 const { v4: uuidv4 } = require('uuid');
 const crypto = require('crypto');
+const path = require('path');
+const fs = require('fs');
 const { pool } = require('../db');
-const { adminAuth } = require('../middleware/auth');
+const { adminAuth, adminAuthQuery } = require('../middleware/auth');
+
+const SCREENSHOTS_DIR = process.env.SCREENSHOTS_DIR || path.join(__dirname, '../../../data/screenshots');
+
+// In-memory live-view sessions: screenId -> auto-stop timeout. Single server instance.
+const liveSessions = new Map();
+const LIVE_TIMEOUT_MS = 120000; // auto-stop live if admin stops sending keepalive
 
 function generateApiKey() {
   return crypto.randomBytes(24).toString('hex'); // 48 hex chars
@@ -40,6 +48,36 @@ router.get('/:id/overrides', adminAuth, async (req, res) => {
     ORDER BY so.start_at DESC
   `, [req.params.id]);
   res.json(rows);
+});
+
+// ── Screen capture (preview thumbnail + live view) ──────────────────
+router.get('/:id/screenshot', adminAuthQuery, (req, res) => {
+  const file = path.join(SCREENSHOTS_DIR, `${req.params.id}.jpg`);
+  if (!fs.existsSync(file)) return res.status(404).json({ error: 'No screenshot yet' });
+  res.set('Cache-Control', 'no-store');
+  res.sendFile(file);
+});
+
+// Start/stop live view: tells the screen to capture fast (start) or revert to idle (stop).
+// While the admin keeps the live view open it re-POSTs active:true as a keepalive;
+// if keepalive stops, the server auto-stops after LIVE_TIMEOUT_MS.
+router.post('/:id/live', adminAuth, (req, res) => {
+  const { active } = req.body;
+  const io = req.app.get('io');
+  const id = req.params.id;
+
+  if (active) {
+    io.to(`screen:${id}`).emit('screen:live:start');
+    if (liveSessions.has(id)) clearTimeout(liveSessions.get(id));
+    liveSessions.set(id, setTimeout(() => {
+      io.to(`screen:${id}`).emit('screen:live:stop');
+      liveSessions.delete(id);
+    }, LIVE_TIMEOUT_MS));
+  } else {
+    if (liveSessions.has(id)) { clearTimeout(liveSessions.get(id)); liveSessions.delete(id); }
+    io.to(`screen:${id}`).emit('screen:live:stop');
+  }
+  res.json({ ok: true });
 });
 
 // ── Playlist schedules (time-based playlist switching) ──────────────

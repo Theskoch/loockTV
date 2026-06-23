@@ -54,6 +54,9 @@ ALTER TABLE screens ADD COLUMN IF NOT EXISTS app_version VARCHAR(32);
 -- Safe migration: store detected media duration (seconds) for video content
 ALTER TABLE content ADD COLUMN IF NOT EXISTS duration_seconds INTEGER;
 
+-- Safe migration: timestamp of the last screenshot uploaded by the screen
+ALTER TABLE screens ADD COLUMN IF NOT EXISTS last_screenshot_at TIMESTAMPTZ;
+
 -- Per-screen playlist schedule: play a playlist during a daily time window.
 -- Default playlist (screens.current_playlist_id) plays outside all windows.
 CREATE TABLE IF NOT EXISTS screen_playlist_schedules (

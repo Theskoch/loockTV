@@ -1,8 +1,13 @@
-const router = require('express').Router();
+const express = require('express');
+const router = express.Router();
+const path = require('path');
+const fs = require('fs');
 const { pool } = require('../db');
 const { screenAuth } = require('../middleware/screenAuth');
 
 const TZ = process.env.APP_TIMEZONE || 'Europe/Moscow';
+const SCREENSHOTS_DIR = process.env.SCREENSHOTS_DIR || path.join(__dirname, '../../../data/screenshots');
+if (!fs.existsSync(SCREENSHOTS_DIR)) fs.mkdirSync(SCREENSHOTS_DIR, { recursive: true });
 
 // Client connects and gets its current playlist
 router.get('/playlist', screenAuth, async (req, res) => {
@@ -63,6 +68,20 @@ router.get('/playlist', screenAuth, async (req, res) => {
 
 router.get('/info', screenAuth, (req, res) => {
   res.json({ screen_id: req.screen.id, name: req.screen.name });
+});
+
+// Screen uploads a screenshot of its physical display (raw JPEG body)
+router.post('/screenshot', screenAuth, express.raw({ type: 'image/jpeg', limit: '6mb' }), async (req, res) => {
+  if (!req.body || !req.body.length) return res.status(400).json({ error: 'Empty body' });
+  try {
+    const file = path.join(SCREENSHOTS_DIR, `${req.screen.id}.jpg`);
+    fs.writeFileSync(file, req.body);
+    await pool.query('UPDATE screens SET last_screenshot_at = NOW() WHERE id = $1', [req.screen.id]);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('Screenshot save failed:', e.message);
+    res.status(500).json({ error: 'Save failed' });
+  }
 });
 
 module.exports = router;

@@ -48,7 +48,7 @@ LoockIT/
 
 ## Схема БД
 - `admin` — логин/password_hash
-- `screens` — id, name, api_key, last_seen, current_playlist_id, **app_version**
+- `screens` — id, name, api_key, last_seen, current_playlist_id, **app_version**, **last_screenshot_at**
 - `content` — id, name, type(image|video|url), file_path, url, mime_type, size_bytes, **duration_seconds** (длина видео, определяется в браузере при загрузке)
 - `playlists` — id, name
 - `playlist_items` — playlist_id, content_id, duration_seconds, sort_order
@@ -68,17 +68,20 @@ LoockIT/
 - `POST /api/screens/:id/override` / `DELETE /api/screens/:id/override/:oid`
 - `GET /api/screens/:id/schedules` — расписание плейлистов экрана
 - `POST /api/screens/:id/schedule` `{ playlist_id, start_time, end_time }` / `DELETE /api/screens/:id/schedule/:sid`
+- `GET /api/screens/:id/screenshot` — последний скрин экрана (JPEG; auth по Bearer ИЛИ `?token=` для `<img>`)
+- `POST /api/screens/:id/live` `{ active }` → socket `screen:live:start/stop` (live-просмотр, авто-стоп 120с без keepalive)
 - `GET/POST/PUT/DELETE /api/playlists` + `GET /api/playlists/:id` (с items)
 - `GET /api/content` / `POST /api/content/upload` (10GB) / `POST /api/content/url` / `DELETE /api/content/:id`
 
 **Client (x-api-key header):**
 - `GET /api/client/info` — проверка ключа
+- `POST /api/client/screenshot` — загрузка скрина экрана (сырой `image/jpeg`, лимит 6МБ) → файл `data/screenshots/<screen_id>.jpg` + `last_screenshot_at`
 - `GET /api/client/playlist` — плейлист + активный override (сервер выбирает плейлист по расписанию `screen_playlist_schedules` для текущего времени в `APP_TIMEZONE`, иначе current_playlist_id; экран ресинкается раз в 60с, поэтому смена по расписанию подхватывается в течение минуты)
 - `GET /api/content/file/:filename` — скачать файл
 
 **WebSocket (Socket.io):**
 - auth: `{ apiKey, version }` — версия сохраняется в screens.app_version
-- Server→Client: `playlist:update`, `override:update`, `screen:reboot`, `screen:update`
+- Server→Client: `playlist:update`, `override:update`, `screen:reboot`, `screen:update`, `screen:live:start`, `screen:live:stop`
 
 ## Логика клиента (Electron)
 1. Первый запуск → `setup.html` (serverUrl + apiKey, мин 32 символа)
@@ -97,6 +100,7 @@ LoockIT/
 14. Угловое меню (80×80px hover в левом нижнем углу): версия, статус, лог, кнопки
 15. **Логирование**: `userData/logs/lookit.log`, 20МБ → ротация (перезапись), кнопка "Открыть папку" в меню
 16. **Auto-update**: `screen:update` → `autoUpdater.checkForUpdates()` → скачивает → `quitAndInstall(true, true)` (тихо). Прогресс в overlay.
+17. **Захват экрана**: `desktopCapturer` снимает РЕАЛЬНЫЙ монитор (не окно). Idle — превью раз в 5 мин (480px JPEG). Live по сокету `screen:live:start` — кадр раз в 4с (1280px), self-expiry 90с. Аплоад сырым `image/jpeg` на `/api/client/screenshot`. Всё в main-процессе, renderer не трогается.
 
 ## Admin UI — страницы
 - **Экраны**: список, версия с жёлтым ↑ если устарела, клик → ScreenDetailPage
@@ -152,6 +156,7 @@ git tag v1.X.X && git push origin v1.X.X
 - v1.1.4: latest-version.txt перенесён в server/, версия читается из файла (Docker без интернета), CI публикует не-draft релизы
 - v1.1.5: лимит загрузки контента 10ГБ (было 1ГБ); прогресс-бар загрузки файла на сервер (XHR вместо fetch) + плашка "Контент загружен" строго после полной загрузки; fix: удаление override раньше времени теперь сразу прерывает его на экране (player.html onSync ловит переход "был активен → удалён/истёк")
 - (серверный апдейт, без нового .exe): длительность видео определяется в браузере при загрузке (`<video>` из локального File) и пишется в `content.duration_seconds`; при добавлении видео в плейлист время показа авто-подставляется = длине ролика (можно укоротить вручную); снят лимит 3600с на время показа для любого контента (поле показывает подсказку "8 ч" для длинных значений)
+- v1.1.6: захват экрана — превью каждого экрана в списке (раз в 5 мин) + live-просмотр (кадр раз в 4с) через `desktopCapturer` (реальный монитор). Сервер: `POST /client/screenshot`, `GET /screens/:id/screenshot` (auth через `?token=`), `POST /screens/:id/live`. Клиент: захват в main-процессе. Новый том `data/screenshots`. **Правка клиента → нужен новый .exe и раскатка через авто-апдейт**
 - (серверный апдейт, без нового .exe): расписание плейлистов по времени суток — на странице экрана можно задать несколько окон (плейлист + С/До), вне окон играет плейлист по умолчанию. Резолв активного плейлиста на сервере в `/api/client/playlist` (таймзона `APP_TIMEZONE`), при пересечении окон побеждает позднее начало, поддержаны окна через полночь. Таблица `screen_playlist_schedules`, эндпоинты `/screens/:id/schedules|schedule`
 
 ## Переменные окружения (.env)

@@ -291,6 +291,37 @@ function ScheduleSection({ screenId, playlists }) {
   )
 }
 
+function LiveModal({ screenId, onClose }) {
+  const [tick, setTick] = useState(() => Date.now())
+
+  useEffect(() => {
+    api.screens.setLive(screenId, true).catch(() => {})
+    const refresh = setInterval(() => setTick(Date.now()), 4000)
+    const keepalive = setInterval(() => api.screens.setLive(screenId, true).catch(() => {}), 60000)
+    return () => {
+      clearInterval(refresh)
+      clearInterval(keepalive)
+      api.screens.setLive(screenId, false).catch(() => {})
+    }
+  }, [screenId])
+
+  return (
+    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div className="relative w-full max-w-5xl" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2 text-white">
+            <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
+            <span className="text-sm font-medium">LIVE · кадр каждые 4 сек</span>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-white text-sm transition-colors">Закрыть ✕</button>
+        </div>
+        <img src={api.screens.screenshotUrl(screenId, tick)} className="w-full rounded-xl bg-black" alt="Экран live" />
+        <div className="text-xs text-gray-500 mt-2">Если кадр не меняется — экран оффлайн или ещё не обновлён до v1.1.6.</div>
+      </div>
+    </div>
+  )
+}
+
 export default function ScreenDetailPage() {
   const { id } = useParams()
   const nav = useNavigate()
@@ -303,6 +334,7 @@ export default function ScreenDetailPage() {
   const [deleting, setDeleting] = useState(false)
   const [latestVersion, setLatestVersion] = useState(null)
   const [checkingVersion, setCheckingVersion] = useState(false)
+  const [liveOpen, setLiveOpen] = useState(false)
 
   const load = useCallback(async () => {
     const [s, p, c] = await Promise.all([api.screens.get(id), api.playlists.list(), api.content.list()])
@@ -442,6 +474,36 @@ export default function ScreenDetailPage() {
           </div>
         </div>
 
+        {/* Screen preview + live */}
+        <div className="bg-gray-900 rounded-xl p-5">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-medium text-white">Экран сейчас</h3>
+            <button
+              onClick={() => setLiveOpen(true)}
+              disabled={!screen.online}
+              className="text-sm bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white rounded-lg px-4 py-2 transition-colors"
+            >
+              Смотреть live
+            </button>
+          </div>
+          {screen.last_screenshot_at ? (
+            <>
+              <img
+                src={api.screens.screenshotUrl(id, screen.last_screenshot_at)}
+                className="w-full rounded-lg bg-black"
+                alt="Превью экрана"
+              />
+              <div className="text-xs text-gray-500 mt-2">
+                Обновлено {new Date(screen.last_screenshot_at).toLocaleString('ru')} · превью раз в 5 мин
+              </div>
+            </>
+          ) : (
+            <div className="text-sm text-gray-600 py-8 text-center">
+              Нет превью. Появится после обновления экрана до v1.1.6 и первого захвата.
+            </div>
+          )}
+        </div>
+
         {/* Default playlist */}
         <div className="bg-gray-900 rounded-xl p-5">
           <h3 className="font-medium text-white mb-1">Плейлист по умолчанию</h3>
@@ -464,6 +526,9 @@ export default function ScreenDetailPage() {
 
         {/* API key */}
         <ApiKeySection screen={screen} onRegenerate={regenerateKey} />
+
+        {/* Live modal */}
+        {liveOpen && <LiveModal screenId={id} onClose={() => setLiveOpen(false)} />}
 
         {/* Danger zone */}
         <div className="bg-gray-900 rounded-xl p-5">
